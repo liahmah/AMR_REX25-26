@@ -1,5 +1,6 @@
 # includes readr, ggplot2, dplyr packages
 library(tidyverse)
+library(arrow)  # for lazy CSV reading without loading into memory
 
 # dataset includes patient data, infecting organism w/ confirmed resistance, 
 # antibiotic prescribed, removing columns related to sample processing 
@@ -33,50 +34,17 @@ merged_demo_resis <- merge(data_demographics, data_resistance,
                            by = c("pat_enc_csn_id_coded", "anon_id", 
                                   "order_proc_id_coded"))
 
-# attempting to download comorbidity data in segments 
-dataset_comorbidity <- file("datasets/microbiology_cultures_comorbidity.csv",
-                            "r")
 length(count.fields("datasets/microbiology_cultures_comorbidity.csv"))
 # 206 547 141 rows incl header
+# Using Arrow for lazy CSV reading - only loads matching rows into memory
+# Open the dataset once (doesn't load into memory)
+comorbidity_lazy <- open_csv_dataset("datasets/microbiology_cultures_comorbidity.csv")
 
-comorbidity_s1 <- read.csv(dataset_comorbidity, nrows = 10000000, header = FALSE) |>
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-# no matching observations
-
-  comorbidity_s2 <- read.csv(dataset_comorbidity, nrows = 10000000, skip = 10000000, 
-                           header = FALSE) |> # analysing rows 10 000 001 - 20M
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-# 107693 matching observations
-
-comorbidity_s3 <- read.csv(dataset_comorbidity, nrows = 10000000, skip = 20000000, 
-                           header = FALSE) |> # analysing rows 20 000 001 - 30M
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-# 72481 matching observations
-
-comorbidity_s4 <- read.csv(dataset_comorbidity, nrows = 10000000, skip = 30000000, 
-                           header = FALSE) |> # analysing rows 30 000 001 - 40M
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-# 107657 matching observations
-
-comorbidity_s5 <- read.csv(dataset_comorbidity, nrows = 10000000, skip = 40000000, 
-                           header = FALSE) |> # analysing rows 40 000 001 - 50M
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-# 83976 matching observations
-
-comorbidity_s6 <- read.csv(dataset_comorbidity, nrows = 10000000, skip = 50000000, 
-                           header = FALSE) |> # analysing rows 50 000 001 - 60M
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-# 0 matching observations
-
-comorbidity_s7 <- read.csv(dataset_comorbidity, nrows = 10000000, skip = 60000000, 
-                           header = FALSE) |> # analysing rows 60 000 001 - 70M
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-s#  matching observations
-
-comorbidity_s8 <- read.csv(dataset_comorbidity, nrows = 10000000, skip = 70000000, 
-                           header = FALSE) |> # analysing rows 70 000 001 - 80M
-  filter(if_any(5, ~ .x == "Asthma")) # filtering for comorbidity = asthma
-#  matching observations
+# Filter for Asthma - uses same dplyr syntax, but only loads matching rows
+data_comorbidity_asthma <- comorbidity_lazy |>
+  filter(comorbidity_component == "Asthma") |>
+  collect()
+# ~370k matching observations total
 
 # searching for relationship age-resistance
 table_age_resis <- table(merged_demo_resis$age, merged_demo_resis$antibiotic)

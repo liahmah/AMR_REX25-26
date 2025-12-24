@@ -1,6 +1,28 @@
 # AMR_REX25
 Repository for URO REX project investigating causality factors of AMR 
 
+# Instructions:
+
+1. Install R and RStudio
+2. Install the following packages:
+   - tidyverse
+   - arrow
+   - ggplot2
+   - dplyr
+   - readr
+   - tidyr
+   - stringr
+
+You can install them by:
+
+```{r}
+install.packages(c("tidyverse", "arrow", "ggplot2", "dplyr", "readr", "tidyr", "stringr"))
+```
+
+Or, from the terminal via.:
+`Rscript -e 'install.packages(c("tidyverse", "arrow", "ggplot2", "dplyr", "readr", "tidyr", "stringr"))'`
+
+
 # Datasets
 
 Source: [https://datadryad.org/dataset/doi:10.5061/dryad.jq2bvq8kp](https://datadryad.org/dataset/doi:10.5061/dryad.jq2bvq8kp)
