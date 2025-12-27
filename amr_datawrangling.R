@@ -31,8 +31,7 @@ data_priorinfection <- read_csv("datasets/microbiology_cultures_prior_med.csv") 
 # dataset includes susceptibility or resistance of different organisms to specified 
 # antibiotic, removing columns relating to sample method
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
-  select(anon_id:order_proc_id_coded, organism:susceptibility) |>
-  mutate(across(c("pat_enc_snc_id_coded", "order_proc_id_coded"), as.double))
+  select(anon_id:order_proc_id_coded, organism:susceptibility) 
 
 ## loading comorbidity dataset, too large so filtering for asthma
 
@@ -46,7 +45,8 @@ comorbidity_lazy <- open_csv_dataset("datasets/microbiology_cultures_comorbidity
 # Filter for Asthma - uses same dplyr syntax, but only loads matching rows
 data_comorbidity_asthma <- comorbidity_lazy |>
   filter(comorbidity_component == "Asthma") |>
-  collect()
+  collect() |>
+  mutate(across(c("pat_enc_snc_id_coded", "order_proc_id_coded"), as.double))
 # ~370k matching observations total
 
 
