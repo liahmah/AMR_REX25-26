@@ -1,6 +1,10 @@
-# includes readr, ggplot2, dplyr packages
-library(tidyverse)
+
+library(tidyverse) # includes readr, ggplot2, dplyr packages
 library(arrow)  # for lazy CSV reading without loading into memory
+
+
+# Loading/wrangling potentially useful datasets ---------------------------
+
 
 # dataset includes patient data, infecting organism w/ confirmed resistance, 
 # antibiotic prescribed, removing columns related to sample processing 
@@ -27,15 +31,14 @@ data_priorinfection <- read_csv("datasets/microbiology_cultures_prior_med.csv") 
 # dataset includes susceptibility or resistance of different organisms to specified 
 # antibiotic, removing columns relating to sample method
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
-  select(anon_id:order_proc_id_coded, organism:susceptibility)
+  select(anon_id:order_proc_id_coded, organism:susceptibility) |>
+  mutate(across(c("pat_enc_snc_id_coded", "order_proc_id_coded"), as.double))
 
-# merging demographics with confirmed resistance
-merged_demo_resis <- merge(data_demographics, data_resistance, 
-                           by = c("pat_enc_csn_id_coded", "anon_id", 
-                                  "order_proc_id_coded"))
+## loading comorbidity dataset, too large so filtering for asthma
 
 length(count.fields("datasets/microbiology_cultures_comorbidity.csv"))
 # 206 547 141 rows incl header
+
 # Using Arrow for lazy CSV reading - only loads matching rows into memory
 # Open the dataset once (doesn't load into memory)
 comorbidity_lazy <- open_csv_dataset("datasets/microbiology_cultures_comorbidity.csv")
@@ -45,6 +48,16 @@ data_comorbidity_asthma <- comorbidity_lazy |>
   filter(comorbidity_component == "Asthma") |>
   collect()
 # ~370k matching observations total
+
+
+# Exploring Relationships -------------------------------------------------
+
+
+
+# merging demographics with confirmed resistance
+merged_demo_resis <- merge(data_demographics, data_resistance, 
+                           by = c("pat_enc_csn_id_coded", "anon_id", 
+                                  "order_proc_id_coded"))
 
 # searching for relationship age-resistance
 table_age_resis <- table(merged_demo_resis$age, merged_demo_resis$antibiotic)
