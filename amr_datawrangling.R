@@ -67,4 +67,9 @@ table_age_resis <- table(merged_demo_resis$age, merged_demo_resis$antibiotic)
 table_age_resis <- table(merged_demo_resis$gender, merged_demo_resis$antibiotic)
 print(table_age_resis)
 
-#
+## asthma x antibiotic susceptibility
+
+# merging
+merged_asthma_suscep <- merge(data_comorbidity_asthma, data_susceptibility, 
+                              by = c("pat_enc_csn_id_coded", "anon_id", 
+                                     "order_proc_id_coded"))
