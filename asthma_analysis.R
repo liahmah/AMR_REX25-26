@@ -2,9 +2,9 @@
 # Setup ---------------------------------------------------------------
 
 library(tidyverse)
+library(MASS)
 
 merged_asthma_suscep <- read_csv("datasets/merged_asthma_susceptibility.csv")
-
 
 # Further wrangling -------------------------------------------------------
 
@@ -36,10 +36,38 @@ summarized_antibiotic <- merged_asthma_suscep |>
   count(antibiotic, susceptibility) |>
   rename('count' = 'n')
   
-# but can't compare to non-asthma patients. compare to who?
+# but can't compare to non-asthma patients. compare to who - compare within
 
-# could compare by antibiotic class:
-max(summarized_antibiotic$count)
 # Relationship analysis ---------------------------------------------------
 
+# trying poisson regression
+poisson_antibiotic <- glm(count ~ susceptibility,
+             family = poisson(link = "log"),
+             data = summarized_antibiotic)
 
+summary(poisson_antibiotic)
+
+## checking data overdispersion
+deviance(poisson_antibiotic) # > 1.5, switching to negative binomial
+
+# trying negative binomial:
+neg_bio_poisson <- glm.nb(count ~ susceptibility, data = summarized_antibiotic)
+summary(neg_bio_poisson)
+
+# could also use chi square for antibiotic-specific comparisons
+penicillin <- summarized_antibiotic |>
+  filter(antibiotic == "Penicillin", 
+         susceptibility == "Resistant" | susceptibility == "Susceptible")
+
+chisq_penicillin <- table(penicillin$antibiotic, penicillin$susceptibility)
+chisq.test(chisq_penicillin)
+
+chisq <- chisq.test(chisq_penicillin)
+chisq$expected # expected value of 1, cannot use chisq
+
+# trying Fisher, maybe for resistant only
+resistant <- summarized_antibiotic |>
+  filter(susceptibility == "Resistant" | susceptibility == "Susceptible") |>
+  filter(antibiotic == "Penicillin" | antibiotic == "Vancomycin")
+
+fisher.test(table(resistant$antibiotic, resistant$susceptibility))
