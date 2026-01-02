@@ -48,6 +48,16 @@ data_comorbidity_asthma <- comorbidity_lazy |>
   collect()
 # ~370k matching observations total
 
+# and for another, non-asthma subset
+
+unique_values <- comorbidity_lazy %>%
+  group_by(comorbidity_component) %>%
+  summarize(count=n()) %>%
+  collect()  # __ is a comparable size
+
+data_comorbidity_ <- comorbidity_lazy |>
+  filter(comorbidity_component == "Asthma") |>
+  collect()
 
 # Exploring Relationships -------------------------------------------------
 
