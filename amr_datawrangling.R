@@ -32,7 +32,7 @@ data_priorinfection <- read_csv("datasets/microbiology_cultures_prior_med.csv") 
 # antibiotic, removing columns relating to sample method
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
   select(anon_id:order_proc_id_coded, organism:susceptibility) |>
-  mutate(across(c("pat_enc_snc_id_coded", "order_proc_id_coded"), as.double))
+  mutate(across(c("pat_enc_csn_id_coded", "order_proc_id_coded"), as.double))
 
 ## loading comorbidity dataset, too large so filtering for asthma
 
@@ -53,6 +53,7 @@ data_comorbidity_asthma <- comorbidity_lazy |>
 # Exploring Relationships -------------------------------------------------
 
 
+## demographics x confirmed resistance
 
 # merging demographics with confirmed resistance
 merged_demo_resis <- merge(data_demographics, data_resistance, 
@@ -73,3 +74,9 @@ print(table_age_resis)
 merged_asthma_suscep <- merge(data_comorbidity_asthma, data_susceptibility, 
                               by = c("pat_enc_csn_id_coded", "anon_id", 
                                      "order_proc_id_coded"))
+
+merged_asthma_suscep |>
+  count(antibiotic, susceptibility)
+
+write.csv(merged_asthma_suscep, "datasets/merged_asthma_susceptibility.csv")
+
