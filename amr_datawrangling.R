@@ -31,7 +31,6 @@ data_priorinfection <- read_csv("datasets/microbiology_cultures_prior_med.csv") 
 # dataset includes susceptibility or resistance of different organisms to specified 
 # antibiotic, removing columns relating to sample method
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
-  select(anon_id:order_proc_id_coded, organism:susceptibility) |>
   mutate(across(c("pat_enc_csn_id_coded", "order_proc_id_coded"), as.double))
 
 ## loading comorbidity dataset, too large so filtering for asthma
@@ -73,10 +72,11 @@ print(table_age_resis)
 # merging
 merged_asthma_suscep <- merge(data_comorbidity_asthma, data_susceptibility, 
                               by = c("pat_enc_csn_id_coded", "anon_id", 
-                                     "order_proc_id_coded"))
+                                     "order_proc_id_coded", "order_time_jittered_utc"))
 
 merged_asthma_suscep |>
   count(antibiotic, susceptibility)
 
-write.csv(merged_asthma_suscep, "datasets/merged_asthma_susceptibility.csv")
+write.csv(merged_asthma_suscep, "datasets/merged_asthma_susceptibility.csv", 
+          row.names = FALSE)
 
