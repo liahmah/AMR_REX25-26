@@ -49,6 +49,8 @@ summary(poisson_antibiotic)
 
 ## checking data overdispersion
 deviance(poisson_antibiotic) # > 1.5, switching to negative binomial
+mean(summarized_antibiotic$count)
+var(summarized_antibiotic$count) # var >> mean, hence neg binom more appropriate
 
 # trying negative binomial:
 neg_bio_poisson <- glm.nb(count ~ susceptibility, data = summarized_antibiotic)
@@ -71,3 +73,15 @@ resistant <- summarized_antibiotic |>
   filter(antibiotic == "Penicillin" | antibiotic == "Vancomycin")
 
 fisher.test(table(resistant$antibiotic, resistant$susceptibility))
+
+# to consider significant difference between counts: use binomial test
+
+sum_anti_wide <- summarized_antibiotic |>
+  pivot_wider(names_from = susceptibility,
+              values_from = count)
+
+sum_anti_model <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
+    family = binomial,
+    data = sum_anti_wide)
+
+summary(sum_anti_model) # 46/51 significant differences, 43/51 3 degrees signif
