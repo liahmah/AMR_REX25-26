@@ -89,23 +89,42 @@ typeof(sum_anti_wide$antibiotic) # confirms factor/integer
 
 levels(sum_anti_wide$antibiotic) 
 ## reference is amikacin (alphabetical); ref used for odds ratios
-### setting reference as vancomycin, since is last-resort antibiotic
-sum_anti_wide$antibiotic <- relevel(sum_anti_wide$antibiotic, ref = "Vancomycin")
+
+totals <- summarized_antibiotic |>
+  group_by(antibiotic) |>
+  summarise(total_count = sum(count, na.rm = TRUE))
+### ciprofloxacin has highest count, 148399
+
+### setting reference as ciprofloxacin as (likely) most commonly administered
+sum_anti_wide$antibiotic <- relevel(sum_anti_wide$antibiotic, ref = "Ciprofloxacin")
 
 ### running binomial regression
 sum_anti_model <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
     family = binomial,
     data = sum_anti_wide)
 
-summary(sum_anti_model) # 47/51 significant differences, 43/51 3 degrees signif
+summary(sum_anti_model) # 48/51 significant differences, 44/51 w/ 3 degrees signif
 ### low coefficient (more signif) indicates lower proportion resistance:suscept
 
 ### looking at odds ratio:
-exp(coef(sum_anti_model)) # lower coeff/intercept = higher odds susceptibility 
-#### lowest coefficients: amox/clavulanic acid 0.02, doxycycline 0.03
+intercept <- exp(coef(sum_anti_model)) # lower intercept = higher odds suscep
+#### lowest coefficients:
+sort(intercept)[1:3] # daptomycin 0.002888, ertapenem 0.012872, metronidazole 0.063837
 
 exp(confint(sum_anti_model)) # <1 = higher odds suscep, 2.5 - 97.5 doesn't cross 1.0
-#### confirms daptomycin as best
+#### daptomycin, ertapenem, and metronidazole have statistically significant 
+#### lower resistance, with narrow/precise estimates
 
-## or using Tukey for no ref - use this to compare between any/all antibiotics
-pairs(emmeans(sum_anti_model, ~ antibiotic), adjust = "tukey")
+## or using Tukey and confirming - use this to compare between any/all antibiotics
+tukey <- summarized_antibiotic |>
+  filter(antibiotic == "Daptomycin" | antibiotic == "Ertapenem" |
+         antibiotic == "Metronidazole" | antibiotic == "Ciprofloxacin") |>
+  pivot_wider(names_from = susceptibility,
+              values_from = count)
+
+tukey_model <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
+    family = binomial, 
+    data = tukey)
+
+pairs(emmeans(tukey_model, ~ antibiotic), adjust = "tukey")
+### all 3 are <0.0001 significant compared to ciprofloxacin
