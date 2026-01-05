@@ -3,6 +3,7 @@
 
 library(tidyverse)
 library(MASS)
+library(emmeans)
 
 merged_asthma_suscep <- read_csv("datasets/merged_asthma_susceptibility.csv")
 
@@ -22,16 +23,18 @@ dupl_anon <- merged_asthma_suscep |>
 merged_asthma_suscep <- merged_asthma_suscep |>
   mutate(across(c(organism, antibiotic, susceptibility), ~ na_if(., "Null")))
 
-# summarizing totals
+# summarizing 
+
+## totals
 summarized <- merged_asthma_suscep |>
   count(susceptibility)
 
-# summarizing number of resistant/susceptible per organism by antibiotic
+## summarizing number of resistant/susceptible per organism by antibiotic
 summarized_organism <- merged_asthma_suscep |>
   count(antibiotic, organism, susceptibility) |>
   rename('count' = 'n')
 
-# or without organism:
+## or without organism:
 summarized_antibiotic <- merged_asthma_suscep |>
   count(antibiotic, susceptibility) |>
   rename('count' = 'n')
@@ -74,14 +77,35 @@ resistant <- summarized_antibiotic |>
 
 fisher.test(table(resistant$antibiotic, resistant$susceptibility))
 
-# to consider significant difference between counts: use binomial test
+# to consider significant difference between counts: rec. to use binomial test
 
 sum_anti_wide <- summarized_antibiotic |>
   pivot_wider(names_from = susceptibility,
               values_from = count)
 
+sum_anti_wide$antibiotic <- as.factor(sum_anti_wide$antibiotic)
+
+typeof(sum_anti_wide$antibiotic) # confirms factor/integer
+
+levels(sum_anti_wide$antibiotic) 
+## reference is amikacin (alphabetical); ref used for odds ratios
+### setting reference as vancomycin, since is last-resort antibiotic
+sum_anti_wide$antibiotic <- relevel(sum_anti_wide$antibiotic, ref = "Vancomycin")
+
+### running binomial regression
 sum_anti_model <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
     family = binomial,
     data = sum_anti_wide)
 
-summary(sum_anti_model) # 46/51 significant differences, 43/51 3 degrees signif
+summary(sum_anti_model) # 47/51 significant differences, 43/51 3 degrees signif
+### low coefficient (more signif) indicates lower proportion resistance:suscept
+
+### looking at odds ratio:
+exp(coef(sum_anti_model)) # lower coeff/intercept = higher odds susceptibility 
+#### lowest coefficients: amox/clavulanic acid 0.02, doxycycline 0.03
+
+exp(confint(sum_anti_model)) # <1 = higher odds suscep, 2.5 - 97.5 doesn't cross 1.0
+#### confirms daptomycin as best
+
+## or using Tukey for no ref - use this to compare between any/all antibiotics
+pairs(emmeans(sum_anti_model, ~ antibiotic), adjust = "tukey")
