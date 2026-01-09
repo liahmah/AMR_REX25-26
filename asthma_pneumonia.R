@@ -15,3 +15,27 @@ pneumonia <- asthma_dataset |>
   filter(organism == "STREPTOCOCCUS PNEUMONIAE") |>
   pivot_wider(names_from = susceptibility,
               values_from = count)
+
+pneumonia$antibiotic <- as.factor(pneumonia$antibiotic)
+
+# Stats analysis ----------------------------------------------------------
+
+# can strep pneumoniae cause other illnesses than pneumonia?
+
+# set levels as ___, most commonly prescribed anitbiotic for pneumonia
+
+# then, run binomial regression
+pneum_model <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
+                      family = binomial,
+                      data = pneumonia)
+summary(pneum_model)
+
+# do confidence intervals and coefficients if desired
+
+# confirm via Tukey
+tukey_pneum <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
+                   family = binomial, 
+                   data = pneum_model)
+
+pairs(emmeans(tukey_pneum, ~ antibiotic), adjust = "tukey")
+
