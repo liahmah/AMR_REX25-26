@@ -22,7 +22,8 @@ pneumonia$antibiotic <- as.factor(pneumonia$antibiotic)
 
 # can strep pneumoniae cause other illnesses than pneumonia?
 
-# set levels as ___, most commonly prescribed anitbiotic for pneumonia
+# set levels as ___, most commonly prescribed antibiotic for pneumonia
+# sum_anti_wide$antibiotic <- relevel(sum_anti_wide$antibiotic, ref = "Ciprofloxacin")
 
 # then, run binomial regression
 pneum_model <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
@@ -35,7 +36,7 @@ summary(pneum_model)
 # confirm via Tukey
 tukey_pneum <- glm(cbind(Resistant, Susceptible) ~ antibiotic,
                    family = binomial, 
-                   data = pneum_model)
+                   data = pneumonia)
 
 pairs(emmeans(tukey_pneum, ~ antibiotic), adjust = "tukey")
 
