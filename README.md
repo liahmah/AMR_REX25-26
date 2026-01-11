@@ -12,11 +12,11 @@ Repository for URO REX project investigating causality factors of AMR
 You can install them by:
 
 ```{r}
-install.packages(c("tidyverse", "arrow", "MASS", "emmeans"))
+install.packages(c("tidyverse", "arrow", "MASS", "emmeans", "brant"))
 ```
 
 Or, from the terminal via.:
-`Rscript -e 'install.packages(c("tidyverse", "arrow", "MASS", "emmeans"))'`
+`Rscript -e 'install.packages(c("tidyverse", "arrow", "MASS", "emmeans", "brant"))'`
 
 
 # Datasets
