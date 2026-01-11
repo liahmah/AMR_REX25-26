@@ -96,8 +96,13 @@ emmeans(large_model, pairwise ~ antibiotic, adjust = "tukey",
         type = "response") # confirms levofloxacin and vancomycin only
   ### p < 0.001 for vancomycin and levofloxacin
 
+# demographic stuff
+distinct(asthma_dataset, anon_id) # 32,672 patients
+distinct(pneumonia, antibiotic) # 12
+
 # Conclusion --------------------------------------------------------------
 
 ## Levofloxacin and Vancomycin have significantly better odds of susceptibility
 ## against S. pneumoniae than penicillin, as compared to 10 other antibiotics
 ## (in asthmatic individuals)
+
