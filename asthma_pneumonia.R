@@ -18,6 +18,9 @@ pneumonia <- asthma_dataset |>
 pneumonia$antibiotic <- as.factor(pneumonia$antibiotic)
 # changing data type for levelling
 
+write.csv(pneumonia, "datasets/asthmapneum_dataset.csv",
+          row.names = FALSE)
+
 # Stats analysis ----------------------------------------------------------
 
 # set ref level as penicillin, considering of resistance concern and largest sample 
