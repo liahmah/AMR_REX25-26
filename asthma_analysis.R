@@ -38,15 +38,15 @@ summarized_organism <- merged_asthma_suscep |>
 summarized_antibiotic <- merged_asthma_suscep |>
   count(antibiotic, susceptibility) |>
   rename('count' = 'n')
-  
+
 # but can't compare to non-asthma patients. compare to who - compare within
 
 # Relationship analysis ---------------------------------------------------
 
 # trying poisson regression
 poisson_antibiotic <- glm(count ~ susceptibility,
-             family = poisson(link = "log"),
-             data = summarized_antibiotic)
+                          family = poisson(link = "log"),
+                          data = summarized_antibiotic)
 
 summary(poisson_antibiotic)
 

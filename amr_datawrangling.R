@@ -8,7 +8,7 @@ library(arrow)  # for lazy CSV reading without loading into memory
 
 # dataset includes patient data, infecting organism w/ confirmed resistance, 
 # antibiotic prescribed, removing columns related to sample processing 
-data_resistance <- read_csv("datasets/microbiology_cultures_microbial_resistance.csv") |> 
+data_resistance <- read_csv("datasets/microbiology_cultures_microbial_resistance.csv") |>
   select(-order_time_jittered_utc, -resistant_time_to_culturetime)
 
 # dataset includes patient data, age and gender demographics
@@ -90,3 +90,10 @@ merged_asthma_suscep |>
 write.csv(merged_asthma_suscep, "datasets/merged_asthma_susceptibility.csv", 
           row.names = FALSE)
 
+# NEW and ALT -----------------------------------------------------------
+
+# instead of asthma, filtering for 
+pneum <- data_susceptibility |>
+  count(organism) |> # counts num obersvations per
+  rename('count' = 'n') 
+#carbapenem resistant?
