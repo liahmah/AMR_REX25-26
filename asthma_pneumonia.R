@@ -18,7 +18,7 @@ pneumonia <- asthma_dataset |>
 
 # looking into count of each antibiotic for sample size
 meta_pneum <- pneumonia |>
-  count(antibiotic) # 12 antibiotics
+  count(antibiotic) # 12 antibiotics, but removing one so 11
 
 # seeing if one should be dropped due to outlying sample size, to avoid skew
 ggplot(meta_pneum, aes(x = 1, y = n)) + # using dummy x
@@ -36,24 +36,25 @@ ggplot(meta_pneum, aes(x = 1, y = n)) + # using dummy x
 pneumonia_filtered <- pneumonia |>
   filter(antibiotic != "Linezolid") |>
   count(antibiotic, organism, susceptibility) |> 
-  rename('count' = 'n')
-  
-# coding "null" as resistant to increase value of significantly susceptible results
-pneumonia_count  <- pneumonia_filtered |>
-  mutate(susceptibility = if_else(susceptibility == "Null",
-                                  "Resistant", susceptibility)) |>
-  group_by(antibiotic, susceptibility) |>
-  summarise(count = sum(count), .groups = "drop")
+  rename('count' = 'n') |>
+  filter(susceptibility != "Null") # dropping null susceptibility data
 
 # changing to factor type for levelling
-pneumonia_levelled <- pneumonia_count
+pneumonia_levelled <- pneumonia_filtered
 pneumonia_levelled$antibiotic <- as.factor(pneumonia_levelled$antibiotic)
 
 # setting pneumonia as reference value, considering sample size and commonality
 pneumonia_levelled$antibiotic <- relevel(pneumonia_levelled$antibiotic, 
                                          ref = "Penicillin")
 
-  # Stats analysis ----------------------------------------------------------
+# facetting to visualize counts / susceptibility / antibiotic
+pneumonia_filtered |>
+  ggplot(aes(x = susceptibility, y = count)) +
+  geom_point() +
+  facet_wrap(facets = vars(antibiotic)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# # # Stats analysis ----------------------------------------------------------
 
 # ordinal logistic regression accounts for intermediate susceptibility
 ## formatting for order susceptible < intermediate < resistant
@@ -70,16 +71,25 @@ summary(olr_model) # neg coefficients lean towards susceptibilty than resistance
 ### antibiotics levofloxacin, linezolid, vancomycin most negative
 
 ### visualizing it raw
-pneumonia_ordered |>
+pneumonia |>
+  filter(antibiotic != "Linezolid") |>
 ggplot(aes(x = antibiotic, fill = susceptibility)) +
-  geom_bar(position = "fill") +
-  ylab("Proportion") +
+  geom_bar() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## converting to odds ratio
 ratio <- exp(coef(olr_model))
 ratio # <1 signifies better susceptibility than penicillin
 ### meropenem, vancomycin, levofloxacin only <1 
+
+### plotting odds ratios
+odds_df <- data.frame(term = names(ratio), odds_ratio = as.numeric(ratio))
+
+odds_df |>
+  ggplot(aes(x = term, y = odds_ratio)) +
+  geom_col() +
+  geom_hline(yintercept = 1) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## tukey pairwise 
 tukey <- emmeans(olr_model, pairwise ~ antibiotic, adjust = "tukey",
@@ -104,15 +114,14 @@ tukey_df |>
   labs(x = "Tukey Pairs",
        y = "Log-odds coefficient (Tukey-adjusted)",
        title = "Tukey-adjusted Coefficients from Proportional Odds Model") 
-  geom_signif(comparisons = list(c("Moxiflaxin-Vancomycin",""), c("",""), ...)
-              y_position = c(20),
-                annotations = c("***"))
+    ## add signif
+
 
 ## confirming significance
 brant(olr_model) # some sparse outcomes, limiting the brant test, but does confirm
 
 ## can also confirm by binary collapse, so considering intermediate as resistant
-pneumonia_binary <- pneumonia_count
+pneumonia_binary <- pneumonia_filtered
 pneumonia_binary$non_susceptible <-  pneumonia_binary$susceptibility %in% 
   c("Intermediate", "Resistant")
 
@@ -140,7 +149,7 @@ length(unique(pneumonia$anon_id)) # 178 unique patients
 # is there a relationship between antibiotic and susceptibility in general?
 ## chi squared test, for multi-category single predictor and multi-category 
 ## single response, using counts
-chisq <- xtabs(count ~ antibiotic + susceptibility, data = pneumonia_count)
+chisq <- xtabs(count ~ antibiotic + susceptibility, data = pneumonia_filtered)
 chisq.test(chisq) # p-value very small, shows that there is a significant 
                   # relationship between predictor and response
 ## to see which antibiotic is MOST associated with susceptibility (highest
@@ -149,9 +158,16 @@ chisq_res <- chisq.test(chisq)
 chisq_res$stdres # vancomycin > moxifloxacin > levofloxacin > ceftriaxone for 
                  # positive relationship to susceptible
 
+# creating general plot of antibiotic to susceptibility
+pneumonia |>
+  ggplot(aes(x = antibiotic, fill = susceptibility)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 45))
+
 # Conclusion --------------------------------------------------------------
 
 ## Levofloxacin and Vancomycin have significantly better odds of susceptibility
 ## against S. pneumoniae than penicillin, as compared to 10 other antibiotics
 ## (in asthmatic individuals) when using odds ratios, but not looking at binomial
 
+## drug side effects? classes, first - last priority? drug subtypes/generations?

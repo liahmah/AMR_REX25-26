@@ -8,16 +8,14 @@ library(arrow)  # for lazy CSV reading without loading into memory
 
 # dataset includes patient data, infecting organism w/ confirmed resistance, 
 # antibiotic prescribed, removing columns related to sample processing 
-data_resistance <- read_csv("datasets/microbiology_cultures_microbial_resistance.csv") |>
-  select(-order_time_jittered_utc, -resistant_time_to_culturetime)
+data_resistance <- read_csv("datasets/microbiology_cultures_microbial_resistance.csv")
 
 # dataset includes patient data, age and gender demographics
 # smaller dataset, no wrangling needed, may limit sample size
 data_demographics <- read_csv("datasets/microbiology_cultures_demographics.csv")
 
-# dataset includes blood composition information, selecting for summary values only
-data_leukocytes <- read_csv("datasets/microbiology_cultures_labs.csv") |>
-  select(anon_id:median_procalcitonin)
+# dataset includes blood composition information
+data_leukocytes <- read_csv("datasets/microbiology_cultures_labs.csv")
 
 # could be useful for investigating if prior exposure predisposes to resistance
 data_priorexposure <- read_csv("datasets/microbiology_cultures_antibiotic_class_exposure.csv")
@@ -25,11 +23,10 @@ data_priorexposure <- read_csv("datasets/microbiology_cultures_antibiotic_class_
 
 # dataset includes patient data, prior medical conditions, removing columns related
 # to sample processing
-data_priorinfection <- read_csv("datasets/microbiology_cultures_prior_med.csv") |>
-  select(-order_time_jittered_utc, -medication_time_to_culturetime)
+data_priorinfection <- read_csv("datasets/microbiology_cultures_prior_med.csv")
 
 # dataset includes susceptibility or resistance of different organisms to specified 
-# antibiotic, removing columns relating to sample method
+# antibiotic, formatting for later merging of datasets
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
   mutate(across(c("pat_enc_csn_id_coded", "order_proc_id_coded"), as.double))
 
@@ -47,17 +44,6 @@ data_comorbidity_asthma <- comorbidity_lazy |>
   filter(comorbidity_component == "Asthma") |>
   collect()
 # ~370k matching observations total
-
-# and for another, non-asthma subset
-
-unique_values <- comorbidity_lazy %>%
-  group_by(comorbidity_component) %>%
-  summarize(count=n()) %>%
-  collect()  # __ is a comparable size
-
-data_comorbidity_ <- comorbidity_lazy |>
-  filter(comorbidity_component == "Asthma") |>
-  collect()
 
 # Exploring Relationships -------------------------------------------------
 
