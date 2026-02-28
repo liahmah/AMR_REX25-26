@@ -29,8 +29,8 @@ ggplot(meta_pneum, aes(x = 1, y = n)) + # using dummy x
   theme(axis.title.x = element_blank(), axis.text.x = element_blank(),
         axis.ticks.x = element_blank()) +
   labs(y = "count/antibiotic", title = "Boxplot of count/antibiotic")
-  # penicillin at upper bound: use as reference
-  # linezolid at lower bound: very small sample size, drop
+# penicillin at upper bound: use as reference
+# linezolid at lower bound: very small sample size, drop
 
 # adding counts of susceptibility per antibiotic, filtering for no linezolid
 pneumonia_filtered <- pneumonia |>
@@ -61,8 +61,8 @@ pneumonia_filtered |>
 
 pneumonia_ordered <- pneumonia_levelled
 pneumonia_ordered$susceptibility <- factor(pneumonia_ordered$susceptibility,
-  levels = c("Susceptible", "Intermediate", "Resistant"),
-  ordered = TRUE)
+                                           levels = c("Susceptible", "Intermediate", "Resistant"),
+                                           ordered = TRUE)
 
 # proportional odds model
 olr_model <- polr(susceptibility ~ antibiotic, data = pneumonia_ordered, 
@@ -73,7 +73,7 @@ summary(olr_model) # neg coefficients lean towards susceptibilty than resistance
 ### visualizing it raw
 pneumonia |>
   filter(antibiotic != "Linezolid") |>
-ggplot(aes(x = antibiotic, fill = susceptibility)) +
+  ggplot(aes(x = antibiotic, fill = susceptibility)) +
   geom_bar() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -93,7 +93,7 @@ odds_df |>
 
 ## tukey pairwise 
 tukey <- emmeans(olr_model, pairwise ~ antibiotic, adjust = "tukey",
-        type = "response")
+                 type = "response")
 tukey
 ### confirms. estimate ~ 18 for all 3 relative to ~ 0 for all others
 ### for those 3 only, p.value < 0.0001
@@ -103,8 +103,8 @@ tukey
 ### extracting coefficients (coefficient == "estimate")
 tukey_df <- as.data.frame(summary(tukey)) |>
   mutate(lower = estimate - 1.96*SE,  # 95% CI lower
-    upper = estimate + 1.96*SE,       # 95% CI upper
-    comparison = contrast)            # labels for plotting
+         upper = estimate + 1.96*SE,       # 95% CI upper
+         comparison = contrast)            # labels for plotting
 
 ### plotting
 tukey_df |>
@@ -114,7 +114,7 @@ tukey_df |>
   labs(x = "Tukey Pairs",
        y = "Log-odds coefficient (Tukey-adjusted)",
        title = "Tukey-adjusted Coefficients from Proportional Odds Model") 
-    ## add signif
+## add signif
 
 
 ## confirming significance
@@ -126,8 +126,8 @@ pneumonia_binary$non_susceptible <-  pneumonia_binary$susceptibility %in%
   c("Intermediate", "Resistant")
 
 bin_model <- glm(non_susceptible ~ antibiotic,
-  family = binomial,
-  data = pneumonia_binary)
+                 family = binomial,
+                 data = pneumonia_binary)
 summary(bin_model)
 
 exp(coef(bin_model)) # <0 are more susceptible

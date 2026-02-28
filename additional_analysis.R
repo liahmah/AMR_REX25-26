@@ -85,3 +85,6 @@ kruskal.test(merged_leuko_suscep$susceptibility ~ merged_leuko_suscep$median_neu
 # dunn test for pair-wise comparisons tells us WHICH pairs are significant
 dunn.test(merged_leuko_suscep$median_neutrophils, merged_leuko_suscep$susceptibility,
           kw = TRUE)
+
+
+
