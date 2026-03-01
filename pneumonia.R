@@ -3,6 +3,7 @@
 library(tidyverse)
 library(MASS)
 library(emmeans)
+library(viridis)
 
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
   mutate(across(c("pat_enc_csn_id_coded", "order_proc_id_coded"), as.double))
@@ -44,19 +45,23 @@ count_suscep_organisms <- data_organisms |>
 # STREPTOCOCCUS PNEUMONIAE ------------------------------------------------
 # wrangling
 strep <- data_susceptibility |>
-  filter(organism == "STREPTOCOCCUS PNEUMONIAE")
-# 6486 samples, 764 unique patients (multiple antibiotics tested / patient), 16 antibiotics
-
+  filter(organism == "STREPTOCOCCUS PNEUMONIAE") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 6435 obs, 11 antibiotics, 764 patients, 2008-2024
+  
   strep_n <- strep |>
-    mutate(antibiotic = as.factor(antibiotic))
+    count(antibiotic, susceptibility, name = "count")
 
-  strep_logical <- strep_n |>
+  strep_logical <- strep |>
+    mutate(antibiotic = as.factor(antibiotic)) |>
     filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
     mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
 strep_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = strep_pneum_logical,
+                       data = strep_logical,
                        family = binomial)
   emmeans(strep_bin_model, pairwise ~ antibiotic, type = "response")
 
@@ -67,33 +72,36 @@ strep_emm_results <- as.data.frame(strep_emm)
 # visualizing
 strep_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of S. pneumoniae susceptibility",
        title = "Predicted S. pneumoniae Susceptibility by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # STAPHYLOCOCCUS AUREUS ---------------------------------------------------
 
 ## Staph
 # wrangling
 staph <- data_susceptibility |>
-  filter(organism == "STAPHYLOCOCCUS AUREUS")
-  # 82519 samples, 23 antibiotics
-  
+  filter(organism == "STAPHYLOCOCCUS AUREUS") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 82513 obs, 18 antibiotics, > 4000 patients, 2008 - 2024
+ 
   staph_n <- staph |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
-  
-  staph_logical <- staph_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
+     count(antibiotic, susceptibility, name = "count")
+
+staph_logical <- staph |>
+  mutate(antibiotic = as.factor(antibiotic)) |>
+  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
+  mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
 staph_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = staph_aur_logical,
+                       data = staph_logical,
                        family = binomial)
 emmeans(staph_bin_model, pairwise ~ antibiotic, type = "response")
 
@@ -104,31 +112,34 @@ staph_emm_results <- as.data.frame(staph_emm)
 # visualizing
 staph_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of S. aureus susceptibility",
        title = "Predicted S. aureus Susceptibility by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## MRSA 
 # wrangling
 staph_mrsa <- data_susceptibility |>
-  filter(organism == "STAPH AUREUS {MRSA}") 
-  # 16674 samples, 823 patients, 19 antibiotics (1 distinct)
+  filter(organism == "STAPH AUREUS {MRSA}") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 16671 obs, 19 antibiotics, 823 patients, 2015 - 2024
   
   staph_mrsa_n <- staph_mrsa |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
+    add_count(antibiotic, susceptibility, name = "count") 
 
-  staph_mrsa_logical <- staph_mrsa_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
+staph_mrsa_logical <- staph_mrsa |>
+  filter(susceptibility %in% c("Susceptible", "Resistant")) |>
+  mutate(antibiotic = as.factor(antibiotic),
+    suscep_logical = if_else(susceptibility == "Susceptible", TRUE, FALSE))
 
 # modelling  
 staph_mrsa_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = staph_aur_mrsa_logical,
+                       data = staph_mrsa_logical,
                        family = binomial)
   emmeans(staph_mrsa_bin_model, pairwise ~ antibiotic, type = "response")
 
@@ -139,27 +150,30 @@ staph_mrsa_emm_results <- as.data.frame(staph_mrsa_emm)
 # visualizing
 staph_mrsa_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of MRSA susceptibility",
        title = "Predicted Methicillin-Resistant S. Aureus Susceptibility by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## variant S. Aureus
 # wrangling
 staph_var <- data_susceptibility |>
-    filter(organism == "STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)") 
-  # 1870 samples,
+  filter(organism == "STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 1837 obs, 7 antibiotics, 118 patients, 2015 - 2023
 
   staph_var_n <- staph_var |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
+    count(antibiotic, susceptibility, name = "count") 
   
-  staph_var_logical <- staph_var_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
+staph_var_logical <- staph_var |>
+  mutate(antibiotic = as.factor(antibiotic)) |>
+  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
+  mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
 staph_var_bin_model <- glm(suscep_logical ~ antibiotic,
@@ -174,28 +188,31 @@ staph_var_emm_results <- as.data.frame(staph_var_emm)
 # visualizing
 staph_var_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of S. aureus variant susceptibility",
        title = "Predicted Susceptibility of S. aureus variant by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # KLEBSIELLA PNEUMONIAE ---------------------------------------------------
 
 # wrangling
 kleb <- data_susceptibility |>
-    filter(organism == "KLEBSIELLA PNEUMONIAE") 
-  # 151 964 samples,
+  filter(organism == "KLEBSIELLA PNEUMONIAE") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 151 859 obs, 28 antibiotics, > 7000 patients, 2008 - 2024
 
   kleb_n <- kleb |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
-  
-  kleb_logical <- kleb_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
+    count(antibiotic, susceptibility, name = "count") 
+    
+kleb_logical <- kleb |>
+  mutate(antibiotic = as.factor(antibiotic)) |>
+  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
+  mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
   kleb_bin_model <- glm(suscep_logical ~ antibiotic,
@@ -210,136 +227,84 @@ kleb <- data_susceptibility |>
 # visualizing
 kleb_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of K. influenzae susceptibility",
        title = "Predicted K. influenzae Susceptibility by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
 ## SSP Ozaenae
 
 # wrangling
-  kleb_ozaenae <- data_susceptibility |>
-  filter(organism == "KLEBSIELLA PNEUMONIAE SSP. OZAENAE") 
-  # 34 samples,
-
-  kleb_ozaenae_n <- kleb_ozaenae |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
+kleb_ozaenae <- data_susceptibility |>
+  filter(organism == "KLEBSIELLA PNEUMONIAE SSP. OZAENAE")
+  # only 34 obs, too small
   
-  kleb_ozaenae_logical <- kleb_ozaenae_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  kleb_ozaenae_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = kleb_ozaenae_logical,
-                       family = binomial)
-  emmeans(kleb_ozaenae_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-  kleb_ozaenae_emm <- emmeans(kleb_ozaenae_bin_model, ~ antibiotic, type = "response")
-  kleb_ozaenae_emm_results <- as.data.frame(kleb_ozaenae_emm) 
-  
-# visualizing
-kleb_ozaenae_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
-  labs(x = "Antibiotic",
-       y = "Predicted probability of K. influenzae SSP ozaenae susceptibility",
-       title = "Predicted K. influenzae SSP Ozaenae Susceptibility by Antibiotic") +
-  theme_minimal()
-
 ## CP resistant SSP
 
 # wrangling
 kleb_cpresis <- data_susceptibility |>
-  filter(organism == "KLEBSIELLA PNEUMONIAE (CARBAPENEM RESISTANT)") 
-  # 373 samples,
-
-  kleb_cpresis_n <- kleb_cpresis |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
-  
-  kleb_cpresis_logical <- kleb_cpresis_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  kleb_cpresis_bin_model <- glm(suscep_logical ~ antibiotic,
-                         data = kleb_cpresis_logical,
-                         family = binomial)
-  emmeans(kleb_cpresis_bin_model, pairwise ~ antibiotic, type = "response")
-  
-# extracting results:
-  kleb_cpresis_emm <- emmeans(kleb_cpresis_bin_model, ~ antibiotic, type = "response")
-  kleb_cpresis_emm_results <- as.data.frame(kleb_cpresis_emm)  
-  
-# visualizing
-kleb_cpresis_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
-  labs(x = "Antibiotic",
-       y = "Predicted probability of CP-resistant K. influenzae susceptibility",
-       title = "Predicted CP-resistant K. influenzae Susceptibility by Antibiotic") +
-  theme_minimal()
+  filter(organism == "KLEBSIELLA PNEUMONIAE (CARBAPENEM RESISTANT)") |>
+  count(antibiotic)
+  # 373 obs but no more than 20 obs / antibiotic => too small
 
 # PSEUDOMONAS AERUGINOSA --------------------------------------------------
 
 # wrangling
 pseudoaeru <- data_susceptibility |>
-    filter(organism == "PSEUDOMONAS AERUGINOSA") 
-  # 48959 samples,
-  
+  filter(organism == "PSEUDOMONAS AERUGINOSA") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 48847 obs, 16 antibiotics, > 3000 patients, 2008 - 2024
+ 
   pseudoaeru_n <- pseudoaeru |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
-  
-  pseudoaeru_logical <- pseudoaeru_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
+    count(antibiotic, susceptibility, name = "count") 
+    
+pseudoaeru_logical <- pseudoaeru |>
+  mutate(antibiotic = as.factor(antibiotic)) |>
+  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
+  mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
   pseudoaeru_bin_model <- glm(suscep_logical ~ antibiotic,
-                                data = pseudoaeru_logical,
-                                family = binomial)
+                       data = pseudoaeru_logical,
+                       family = binomial)
   emmeans(pseudoaeru_bin_model, pairwise ~ antibiotic, type = "response")
-  
+
 # extracting results:
-  pseudoaeru_emm <- emmeans(pseudoaeru_bin_model, ~ antibiotic, 
-                            type = "response")
+  pseudoaeru_emm <- emmeans(pseudoaeru_bin_model, ~ antibiotic, type = "response")
   pseudoaeru_emm_results <- as.data.frame(pseudoaeru_emm) 
 
 # visualizing
 pseudoaeru_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of P. aeruginosa susceptibility",
        title = "Predicted P. aeruginosa Susceptibility by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## mucoid
 # wrangling
 pseudoaeru_muc <- data_susceptibility |>
-  filter(organism == "MUCOID PSEUDOMONAS AERUGINOSA") 
-  # 33037 samples,
-  
+  filter(organism == "MUCOID PSEUDOMONAS AERUGINOSA") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 32894 obs, 15 antibiotics, 823 patients, 2008 - 2024
+ 
   pseudoaeru_muc_n <- pseudoaeru_muc |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
+    count(antibiotic, susceptibility, name = "count") 
   
-  pseudoaeru_muc_logical <- pseudoaeru_muc_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
+pseudoaeru_muc_logical <- pseudoaeru_muc |>
+  mutate(antibiotic = as.factor(antibiotic)) |>
+  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
+  mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
   pseudoaeru_muc_bin_model <- glm(suscep_logical ~ antibiotic,
@@ -355,27 +320,31 @@ pseudoaeru_muc <- data_susceptibility |>
 # visualizing
 pseudoaeru_muc_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of mucoid P. aeruginosa susceptibility",
        title = "Predicted mucoid P. aeruginosa Susceptibility by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## nonmucoid
 # wrangling
 pseudoaeru_nonmuc  <- data_susceptibility |>
-    filter(organism == "PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)") 
-  # 16327 samples,
-  
+  filter(organism == "PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 16252 obs, 15 antibiotics, 315 patients, 2013 - 2023
+
   pseudoaeru_nonmuc_n <- pseudoaeru_nonmuc |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
+    count(antibiotic, susceptibility, name = "count") 
+    
   
-  pseudoaeru_nonmuc_logical <- pseudoaeru_nonmuc_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
+pseudoaeru_nonmuc_logical <- pseudoaeru_nonmuc |>
+  mutate(antibiotic = as.factor(antibiotic)) |>
+  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
+  mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
   pseudoaeru_nonmuc_bin_model <- glm(suscep_logical ~ antibiotic,
@@ -391,35 +360,38 @@ pseudoaeru_nonmuc  <- data_susceptibility |>
 # visualizing
 pseudoaeru_nonmuc_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
        y = "Predicted probability of non-mucoid P. aeruginosa susceptibility",
        title = "Predicted non-mucoid P. aeruginosa Susceptibility by Antibiotic") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
 # ESCHERICHIA COLI --------------------------------------------------------
 
 # wrangling
 ecoli <- data_susceptibility |>
-    filter(organism == "ESCHERICHIA COLI") 
-  # 874 897 samples,
+  filter(organism == "ESCHERICHIA COLI") |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() 
+  # remains 874 699 obs, 30 antibiotics, > 39 000 patients, 2007 - 2024
   
   ecoli_n <- ecoli |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
-  
-  ecoli_logical <- ecoli_n |>
+    count(antibiotic, susceptibility, name = "count")
+
+  ecoli_logical <- ecoli |>
+    mutate(antibiotic = as.factor(antibiotic)) |>
     filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
     mutate(suscep_logical = susceptibility == "Susceptible")
 
 # modelling
   ecoli_bin_model <- glm(suscep_logical ~ antibiotic,
-                                data = ecoli_logical,
-                                family = binomial)
+                       data = ecoli_logical,
+                       family = binomial)
   emmeans(ecoli_bin_model, pairwise ~ antibiotic, type = "response")
-  
+
 # extracting results:
   ecoli_emm <- emmeans(ecoli_bin_model, ~ antibiotic, type = "response")
   ecoli_emm_results <- as.data.frame(ecoli_emm) 
@@ -427,74 +399,99 @@ ecoli <- data_susceptibility |>
 # visualizing
 ecoli_emm_results |>
   ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
+  geom_col(fill = "royalblue") +
   geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
   labs(x = "Antibiotic",
-       y = "Predicted probability of E. coli susceptibility",
-       title = "Predicted E. coli Susceptibility by Antibiotic") +
-  theme_minimal()
+       y = "Predicted probability of K. influenzae susceptibility",
+       title = "Predicted K. influenzae Susceptibility by Antibiotic") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
 ## Carbapenem resistant strain
 # wrangling
 ecoli_cpresis  <- data_susceptibility |>
-    filter(organism == "ESCHERICHIA COLI (CARBAPENEM RESISTANT)") 
-  # 329 samples,
-  
-  ecoli_cpresis_n <- ecoli_cpresis |>
-    add_count(antibiotic, susceptibility, name = "count") |>
-    mutate(antibiotic = as.factor(antibiotic))
-  
-  ecoli_cpresis_logical <- ecoli_cpresis_n |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  ecoli_cpresis_bin_model <- glm(suscep_logical ~ antibiotic,
-                                data = ecoli_cpresis_logical,
-                                family = binomial)
-  emmeans(ecoli_cpresis_bin_model, pairwise ~ antibiotic, type = "response")
-  
-# extracting results:
-  ecoli_cpresis_emm <- emmeans(ecoli_cpresis_bin_model, ~ antibiotic, 
-                               type = "response")
-  ecoli_cpresis_emm_results <- as.data.frame(ecoli_cpresis_emm) 
-
-# visualizing
-ecoli_cpresis_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "steelblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  coord_flip() +  # flip axes for easier reading
-  labs(x = "Antibiotic",
-       y = "Predicted probability of CP-resistant E. coli susceptibility",
-       title = "Predicted CP-resistant E. coli Susceptibility by Antibiotic") +
-  theme_minimal()
-
+  filter(organism == "ESCHERICHIA COLI (CARBAPENEM RESISTANT)") |>
+  count(antibiotic)
+  # only 329 obs, no more than 19 / antibiotic => too small sample size
 
 # noodling ----------------------------------------------------------------
 
-## binomial logistic regression
-bin_model <- glm(suscep_logical ~ order_time_jittered_utc + antibiotic, 
-                 data = staph_aur_logical, 
-                 family = binomial)
-summary(bin_model)
+# count / antibiotic facet plot
 
-table(strep_n$antibiotic, strep_n$susceptibility)
-# dropping Cloramphenicol, daptomycin, ertapenem, tetracycline for sample sizes
+data_organisms <- data_organisms |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  # removing low-frequency antibiotics
+  ungroup() |>
+  group_by(organism) |>
+  filter(n() > 400) |>
+  ungroup() 
 
-staph_aur_n |>
-  ggplot(aes(x = susceptibility, y = count)) +
-  geom_point() +
-  facet_wrap(facets = vars(antibiotic)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+data_organisms |>
+  ggplot(aes(x = antibiotic, fill = susceptibility)) +
+  geom_bar() +
+  scale_y_log10() +
+  facet_wrap(~organism) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 4))
 
-staph_aur_mrsa_n |>
-  ggplot(aes(x = susceptibility, y = count)) +
-  geom_point() +
-  facet_wrap(facets = vars(antibiotic)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# tying it all together
 
-demo_suscep |>
-  ggplot(aes(x = antibiotic, y = organism, colour = susceptibility)) +
-  geom
+all_dfs <- list(ecoli_emm_results, kleb_emm_results, pseudoaeru_emm_results, 
+                pseudoaeru_muc_emm_results, pseudoaeru_nonmuc_emm_results,
+                staph_emm_results,  staph_mrsa_emm_results, staph_var_emm_results,
+                strep_emm_results)
+
+labels <- c("E. coli",  "K. pneumoniae", "P. aeruginosa", 
+            "Mucosal P. aeruginosa",  "Non-mucosal P. aeruginosa",
+            "S. aureus",  "MRSA", "S. aureus variant",
+            "S. pneumoniae")
+
+
+all_dfs <- mapply(function(df, lab) {
+  
+  # Convert to data frame if not already
+  if(!is.data.frame(df)) df <- as.data.frame(df)
+  
+  # Add dataset label as character
+  df$dataset <- lab
+  
+  return(df)
+}, all_dfs, labels, SIMPLIFY = FALSE)
+
+# --- 3. Standardize columns: fill missing columns with NA ---
+# Find all unique column names
+all_cols <- unique(unlist(lapply(all_dfs, colnames)))
+
+# Make sure each df has all columns
+all_dfs <- lapply(all_dfs, function(df) {
+  missing <- setdiff(all_cols, colnames(df))
+  for(col in missing) df[[col]] <- NA
+  # reorder columns consistently
+  df[, all_cols]
+})
+
+# --- 4. Combine all data frames ---
+all_combined <- do.call(rbind, all_dfs)
+
+# --- 5. Optional: ensure dataset is a factor for faceting ---
+all_combined$dataset <- factor(all_combined$dataset, levels = labels)
+
+all_combined <- all_combined |>
+  group_by(dataset) |>
+  mutate(rank_prob = rank(-prob, ties.method = "first"),
+         is_top2 = rank_prob <= 2) |>
+  ungroup()
+
+all_combined |>
+  ggplot(aes(x = antibiotic, y = prob, fill = is_top2)) +
+  geom_col() +
+  facet_wrap(~ dataset, scales = "free_x") + # one panel per dataset
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
+  scale_fill_manual(values = c("TRUE"= "firebrick", "FALSE" = "royalblue")) +
+  theme_minimal() +
+  labs(y = "Predicted Probability", x = "Antibiotic",
+       title = "Probability of antibiotic susceptibility by organism") +
+  theme(axis.text.x = element_text(angle = 45, size = 7, hjust = 1),
+        strip.text = element_text(face = "bold", size = 12),
+        legend.position = "none")
+        
+          
