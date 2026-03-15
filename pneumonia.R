@@ -1,23 +1,23 @@
 # Loading -----------------------------------------------------------------
 
 library(tidyverse)
-library(MASS)
 library(emmeans)
-library(viridis)
+library(scales)
+library(showtext)
+library(svglite)
+library(ggsignif)
+library(brglm2)
 
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
   mutate(across(c("pat_enc_csn_id_coded", "order_proc_id_coded"), as.double))
 
-data_demographics <- read_csv("datasets/microbiology_cultures_demographics.csv")
+# dataset components
+# n_distinct(data_susceptibility$anon_id) # 283715
+# n_distinct(data_susceptibility$antibiotic) # 55 
+# n_distinct(data_susceptibility$organism) # 315
 
-demo_suscep <- merge(data_demographics, data_susceptibility,
-                     by = c("order_proc_id_coded", "pat_enc_csn_id_coded", 
-                            "anon_id")) |>
-  filter(organism != "Null")
-
-## selecting pneumonia-causing species of interest:
-
-species <- as.data.frame(unique(demo_suscep$organism))
+## identifying pneumonia-causing species of interest:
+# species <- as.data.frame(unique(demo_suscep$organism))
 # Filtering for Streptococcus pneumoniae, yes
 # Haemophilus influenzae, no
 # Klebsiella pneumoniae, yes, 3 subvariants
@@ -28,397 +28,28 @@ species <- as.data.frame(unique(demo_suscep$organism))
 # excluding unidentified species
 # susceptibility coded as true (susceptible) or false (resistant)
 
-data_organisms <- demo_suscep |>
-  filter(organism %in% c("STREPTOCOCCUS PNEUMONIAE", "STAPHYLOCOCCUS AUREUS",
-                       "STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)",
-                       "STAPH AUREUS {MRSA}", "KLEBSIELLA PNEUMONIAE", 
-                       "KLEBSIELLA PNEUMONIAE SSP. OZAENAE", 
-                       "KLEBSIELLA PNEUMONIAE (CARBAPENEM RESISTANT)", 
-                       "PSEUDOMONAS AERUGINOSA", "MUCOID PSEUDOMONAS AERUGINOSA",
-                       "PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)", "ESCHERICHIA COLI",
-                       "ESCHERICHIA COLI (CARBAPENEM RESISTANT)"))
+data_organisms <- data_susceptibility |>
+  filter(organism %in% c("STREPTOCOCCUS PNEUMONIAE", 
+                         "STAPHYLOCOCCUS AUREUS",
+                         "STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)",
+                         "STAPH AUREUS {MRSA}", 
+                         "KLEBSIELLA PNEUMONIAE", 
+                         "KLEBSIELLA PNEUMONIAE SSP. OZAENAE", 
+                         "KLEBSIELLA PNEUMONIAE (CARBAPENEM RESISTANT)", 
+                         "PSEUDOMONAS AERUGINOSA", 
+                         "MUCOID PSEUDOMONAS AERUGINOSA",
+                         "PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)", 
+                         "ESCHERICHIA COLI",
+                         "ESCHERICHIA COLI (CARBAPENEM RESISTANT)"))
 
-count_suscep_organisms <- data_organisms |>
-  count(antibiotic, susceptibility, organism)
+# dataset components
+n_distinct(data_organisms$anon_id) # 51778
+n_distinct(data_organisms$antibiotic) # 50 
+n_distinct(data_organisms$organism) # 12
 
+# susceptibility distribution plot ---------------------------------------------
 
-# STREPTOCOCCUS PNEUMONIAE ------------------------------------------------
-# wrangling
-strep <- data_susceptibility |>
-  filter(organism == "STREPTOCOCCUS PNEUMONIAE") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 6435 obs, 11 antibiotics, 764 patients, 2008-2024
-  
-  strep_n <- strep |>
-    count(antibiotic, susceptibility, name = "count")
-
-  strep_logical <- strep |>
-    mutate(antibiotic = as.factor(antibiotic)) |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-strep_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = strep_logical,
-                       family = binomial)
-  emmeans(strep_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-strep_emm <- emmeans(strep_bin_model, ~ antibiotic, type = "response")
-strep_emm_results <- as.data.frame(strep_emm) 
-
-# visualizing
-strep_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of S. pneumoniae susceptibility",
-       title = "Predicted S. pneumoniae Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# STAPHYLOCOCCUS AUREUS ---------------------------------------------------
-
-## Staph
-# wrangling
-staph <- data_susceptibility |>
-  filter(organism == "STAPHYLOCOCCUS AUREUS") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 82513 obs, 18 antibiotics, > 4000 patients, 2008 - 2024
- 
-  staph_n <- staph |>
-     count(antibiotic, susceptibility, name = "count")
-
-staph_logical <- staph |>
-  mutate(antibiotic = as.factor(antibiotic)) |>
-  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-  mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-staph_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = staph_logical,
-                       family = binomial)
-emmeans(staph_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-staph_emm <- emmeans(staph_bin_model, ~ antibiotic, type = "response")
-staph_emm_results <- as.data.frame(staph_emm) 
-
-# visualizing
-staph_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of S. aureus susceptibility",
-       title = "Predicted S. aureus Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-## MRSA 
-# wrangling
-staph_mrsa <- data_susceptibility |>
-  filter(organism == "STAPH AUREUS {MRSA}") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 16671 obs, 19 antibiotics, 823 patients, 2015 - 2024
-  
-  staph_mrsa_n <- staph_mrsa |>
-    add_count(antibiotic, susceptibility, name = "count") 
-
-staph_mrsa_logical <- staph_mrsa |>
-  filter(susceptibility %in% c("Susceptible", "Resistant")) |>
-  mutate(antibiotic = as.factor(antibiotic),
-    suscep_logical = if_else(susceptibility == "Susceptible", TRUE, FALSE))
-
-# modelling  
-staph_mrsa_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = staph_mrsa_logical,
-                       family = binomial)
-  emmeans(staph_mrsa_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-staph_mrsa_emm <- emmeans(staph_mrsa_bin_model, ~ antibiotic, type = "response")
-staph_mrsa_emm_results <- as.data.frame(staph_mrsa_emm)
-
-# visualizing
-staph_mrsa_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of MRSA susceptibility",
-       title = "Predicted Methicillin-Resistant S. Aureus Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-## variant S. Aureus
-# wrangling
-staph_var <- data_susceptibility |>
-  filter(organism == "STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 1837 obs, 7 antibiotics, 118 patients, 2015 - 2023
-
-  staph_var_n <- staph_var |>
-    count(antibiotic, susceptibility, name = "count") 
-  
-staph_var_logical <- staph_var |>
-  mutate(antibiotic = as.factor(antibiotic)) |>
-  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-  mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-staph_var_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = staph_var_logical,
-                       family = binomial)
-  emmeans(staph_var_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-staph_var_emm <- emmeans(staph_var_bin_model, ~ antibiotic, type = "response")
-staph_var_emm_results <- as.data.frame(staph_var_emm)
-
-# visualizing
-staph_var_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of S. aureus variant susceptibility",
-       title = "Predicted Susceptibility of S. aureus variant by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# KLEBSIELLA PNEUMONIAE ---------------------------------------------------
-
-# wrangling
-kleb <- data_susceptibility |>
-  filter(organism == "KLEBSIELLA PNEUMONIAE") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 151 859 obs, 28 antibiotics, > 7000 patients, 2008 - 2024
-
-  kleb_n <- kleb |>
-    count(antibiotic, susceptibility, name = "count") 
-    
-kleb_logical <- kleb |>
-  mutate(antibiotic = as.factor(antibiotic)) |>
-  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-  mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  kleb_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = kleb_logical,
-                       family = binomial)
-  emmeans(kleb_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-  kleb_emm <- emmeans(kleb_bin_model, ~ antibiotic, type = "response")
-  kleb_emm_results <- as.data.frame(kleb_emm) 
-
-# visualizing
-kleb_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of K. influenzae susceptibility",
-       title = "Predicted K. influenzae Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  
-## SSP Ozaenae
-
-# wrangling
-kleb_ozaenae <- data_susceptibility |>
-  filter(organism == "KLEBSIELLA PNEUMONIAE SSP. OZAENAE")
-  # only 34 obs, too small
-  
-## CP resistant SSP
-
-# wrangling
-kleb_cpresis <- data_susceptibility |>
-  filter(organism == "KLEBSIELLA PNEUMONIAE (CARBAPENEM RESISTANT)") |>
-  count(antibiotic)
-  # 373 obs but no more than 20 obs / antibiotic => too small
-
-# PSEUDOMONAS AERUGINOSA --------------------------------------------------
-
-# wrangling
-pseudoaeru <- data_susceptibility |>
-  filter(organism == "PSEUDOMONAS AERUGINOSA") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 48847 obs, 16 antibiotics, > 3000 patients, 2008 - 2024
- 
-  pseudoaeru_n <- pseudoaeru |>
-    count(antibiotic, susceptibility, name = "count") 
-    
-pseudoaeru_logical <- pseudoaeru |>
-  mutate(antibiotic = as.factor(antibiotic)) |>
-  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-  mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  pseudoaeru_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = pseudoaeru_logical,
-                       family = binomial)
-  emmeans(pseudoaeru_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-  pseudoaeru_emm <- emmeans(pseudoaeru_bin_model, ~ antibiotic, type = "response")
-  pseudoaeru_emm_results <- as.data.frame(pseudoaeru_emm) 
-
-# visualizing
-pseudoaeru_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of P. aeruginosa susceptibility",
-       title = "Predicted P. aeruginosa Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-## mucoid
-# wrangling
-pseudoaeru_muc <- data_susceptibility |>
-  filter(organism == "MUCOID PSEUDOMONAS AERUGINOSA") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 32894 obs, 15 antibiotics, 823 patients, 2008 - 2024
- 
-  pseudoaeru_muc_n <- pseudoaeru_muc |>
-    count(antibiotic, susceptibility, name = "count") 
-  
-pseudoaeru_muc_logical <- pseudoaeru_muc |>
-  mutate(antibiotic = as.factor(antibiotic)) |>
-  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-  mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  pseudoaeru_muc_bin_model <- glm(suscep_logical ~ antibiotic,
-                                data = pseudoaeru_muc_logical,
-                                family = binomial)
-  emmeans(pseudoaeru_muc_bin_model, pairwise ~ antibiotic, type = "response")
-  
-# extracting results:
-  pseudoaeru_muc_emm <- emmeans(pseudoaeru_muc_bin_model, ~ antibiotic, 
-                                type = "response")
-  pseudoaeru_muc_emm_results <- as.data.frame(pseudoaeru_muc_emm) 
-
-# visualizing
-pseudoaeru_muc_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of mucoid P. aeruginosa susceptibility",
-       title = "Predicted mucoid P. aeruginosa Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-## nonmucoid
-# wrangling
-pseudoaeru_nonmuc  <- data_susceptibility |>
-  filter(organism == "PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 16252 obs, 15 antibiotics, 315 patients, 2013 - 2023
-
-  pseudoaeru_nonmuc_n <- pseudoaeru_nonmuc |>
-    count(antibiotic, susceptibility, name = "count") 
-    
-  
-pseudoaeru_nonmuc_logical <- pseudoaeru_nonmuc |>
-  mutate(antibiotic = as.factor(antibiotic)) |>
-  filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-  mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  pseudoaeru_nonmuc_bin_model <- glm(suscep_logical ~ antibiotic,
-                                data = pseudoaeru_nonmuc_logical,
-                                family = binomial)
-  emmeans(pseudoaeru_nonmuc_bin_model, pairwise ~ antibiotic, type = "response")
-  
-# extracting results:
-  pseudoaeru_nonmuc_emm <- emmeans(pseudoaeru_nonmuc_bin_model, ~ antibiotic, 
-                                   type = "response")
-  pseudoaeru_nonmuc_emm_results <- as.data.frame(pseudoaeru_nonmuc_emm) 
-
-# visualizing
-pseudoaeru_nonmuc_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of non-mucoid P. aeruginosa susceptibility",
-       title = "Predicted non-mucoid P. aeruginosa Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  
-# ESCHERICHIA COLI --------------------------------------------------------
-
-# wrangling
-ecoli <- data_susceptibility |>
-  filter(organism == "ESCHERICHIA COLI") |>
-  group_by(antibiotic) |>
-  filter(n() > 100) |>  # removing low-frequency antibiotics
-  ungroup() 
-  # remains 874 699 obs, 30 antibiotics, > 39 000 patients, 2007 - 2024
-  
-  ecoli_n <- ecoli |>
-    count(antibiotic, susceptibility, name = "count")
-
-  ecoli_logical <- ecoli |>
-    mutate(antibiotic = as.factor(antibiotic)) |>
-    filter(susceptibility == "Susceptible" | susceptibility == "Resistant") |>
-    mutate(suscep_logical = susceptibility == "Susceptible")
-
-# modelling
-  ecoli_bin_model <- glm(suscep_logical ~ antibiotic,
-                       data = ecoli_logical,
-                       family = binomial)
-  emmeans(ecoli_bin_model, pairwise ~ antibiotic, type = "response")
-
-# extracting results:
-  ecoli_emm <- emmeans(ecoli_bin_model, ~ antibiotic, type = "response")
-  ecoli_emm_results <- as.data.frame(ecoli_emm) 
-
-# visualizing
-ecoli_emm_results |>
-  ggplot(aes(x = reorder(antibiotic, prob), y = prob)) +
-  geom_col(fill = "royalblue") +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  labs(x = "Antibiotic",
-       y = "Predicted probability of K. influenzae susceptibility",
-       title = "Predicted K. influenzae Susceptibility by Antibiotic") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  
-## Carbapenem resistant strain
-# wrangling
-ecoli_cpresis  <- data_susceptibility |>
-  filter(organism == "ESCHERICHIA COLI (CARBAPENEM RESISTANT)") |>
-  count(antibiotic)
-  # only 329 obs, no more than 19 / antibiotic => too small sample size
-
-# noodling ----------------------------------------------------------------
-
-# count / antibiotic facet plot
-
-data_organisms <- data_organisms |>
+data_wrangled <- data_organisms |>
   group_by(antibiotic) |>
   filter(n() > 100) |>  # removing low-frequency antibiotics
   ungroup() |>
@@ -426,72 +57,314 @@ data_organisms <- data_organisms |>
   filter(n() > 400) |>
   ungroup() 
 
-data_organisms |>
+# abbreviating antibiotic names for improved readability
+abx_lookup <- c("Ciprofloxacin" = "CIP", "Nitrofurantoin" = "NIT",  
+                "Ampicillin" = "AMP","Trimethoprim/Sulfamethoxazole" = "SXT",  
+                "Gentamicin" = "GEN", "Cefazolin" = "CZO", "Levofloxacin" = "LVX", 
+                "Piperacillin/Tazobactam" = "TZP", "Cefuroxime" = "CXM", 
+                "Ampicillin/Sulbactam" = "SAM", "Erythromycin" = "ERY",
+                "Vancomycin" = "VAN", "Clindamycin" = "CLI", "Oxacillin" = "OXA",
+                "Penicillin" = "PEN", "Tetracycline" = "TCY", "Amikacin" = "AMK", 
+                "Tobramycin" = "TOB", "Linezolid" = "LNZ", "Moxifloxacin" = "MFX",
+                "Ertapenem" = "ETP", "Cefepime" = "FEP", "Ceftriaxone" = "CRO",
+                "Ceftazidime" = "CAZ", "Aztreonam" = "ATM", "Meropenem" = "MEM",
+                "Imipenem" = "IPM", "Colistin" = "COL", "Piperacillin" = "PIP",
+                "Ticarcillin" = "TIC", "Doxycycline" = "DOX", "Cefotaxime" = "CTX",
+                "Amoxicillin/Clavulanic Acid" = "AMC", 
+                "Cephalexin/Cephalothin" = "LEX/CEP", "Daptomycin" = "DAP",
+                "Tigecycline" = "TGC", "Cefotetan" = "CTT", "Cefoxitin" = "FOX",
+                "Doripenem" = "DOR", "Fosfomycin" = "FOS", "Ceftaroline" = "CPT",
+                "Ceftolozane/Tazobactam" = "CZT", "Ceftazidime/Avibactam" = "CZA",
+                "Imipenem/Ebactam" = "IMR")
+
+# grouping by class
+class_lookup <- c("CIP" = "Fluoroquinolone", "LVX" = "Fluoroquinolone",
+                  "MFX" = "Fluoroquinolone", "GEN" = "Aminoglycoside",
+                  "AMK" = "Aminoglycoside", "TOB" = "Aminoglycoside",
+                  "IPM" = "Carbapenem", "MEM" = "Carbapenem", "DOR" = "Carbapenem",
+                  "ETP" = "Carbapenem", "AMC" = "BL/BLI", "SAM" = "BL/BLI",
+                  "TZP" = "BL/BLI", "CZT" = "BL/BLI", "CZA" = "BL/BLI",
+                  "AMP" = "Penicillin", "PEN" = "Penicillin", "OXA" = "Penicillin",
+                  "PIP" = "Penicillin", "TIC" = "Penicillin", 
+                  "CZO" = "Cephalosporin", "CXM" = "Cephalosporin",
+                  "FOX" = "Cephalosporin", "CTT" = "Cephalosporin", 
+                  "CRO" = "Cephalosporin", "CTX" = "Cephalosporin", 
+                  "CAZ" = "Cephalosporin", "FEP" = "Cephalosporin",
+                  "CPT" = "Cephalosporin", "ATM" = "Monobactam",
+                  "VAN" = "Glycopeptide", "DAP" = "Lipopeptide",
+                  "LNZ" = "Oxazolidinone", "TCY" = "Tetracycline",
+                  "DOX" = "Tetracycline",  "TGC" = "Tetracycline",
+                  "ERY" = "Macrolide", "CLI" = "Lincosamide", "IMR" = "BL/BLI",
+                  "SXT" = "Folate inhibitor", "NIT" = "Nitrofuran",
+                  "COL" = "Polymyxin", "FOS" = "Phosphonic acid", 
+                  "LEX/CEP" = "Cephalosporin")
+
+
+
+data_wrangled <- data_wrangled |>
+  mutate(
+    antibiotic = recode(antibiotic, !!!abx_lookup),
+    class = recode(antibiotic, !!!class_lookup),
+    genus = recode(organism,
+                   `ESCHERICHIA COLI` = "E. coli",
+                   `KLEBSIELLA PNEUMONIAE` = "K. pneumoniae",
+                   `PSEUDOMONAS AERUGINOSA` = "P. aeruginosa",
+                   `MUCOID PSEUDOMONAS AERUGINOSA` = "P. aeruginosa",
+                   `PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)` = "P. aeruginosa",
+                   `STAPH AUREUS {MRSA}` = "S. aureus",
+                   `STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)`
+                        = "S. aureus", 
+                   `STAPHYLOCOCCUS AUREUS` = "S. aureus",
+                   `STREPTOCOCCUS PNEUMONIAE` = "S. pneumoniae"),
+         organism = recode(organism,
+                           `ESCHERICHIA COLI` = "E. coli",
+                           `KLEBSIELLA PNEUMONIAE` = "K. pneumoniae",
+                           `PSEUDOMONAS AERUGINOSA` = "P. aeruginosa",
+                           `MUCOID PSEUDOMONAS AERUGINOSA` = "Mucoid P. aeruginosa",
+                           `PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)` = 
+                          "Non-mucoid P. aeruginosa",
+                          `STAPH AUREUS {MRSA}` = "MRSA",
+                          `STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)`
+                          = "S. aureus morphological variant", 
+                          `STAPHYLOCOCCUS AUREUS` = "S. aureus",
+                          `STREPTOCOCCUS PNEUMONIAE` = "S. pneumoniae"))
+
+genus_n <- data_wrangled |>
+  count(genus) |>
+  mutate(label = paste0("italic('", genus, "')~'(n = ", n, ")'"))
+
+data_plot <- data_wrangled |>
+  left_join(genus_n, by = "genus")
+         
+
+showtext_auto(TRUE)
+font_add(family = "TimesNewRoman", regular = "C:/Windows/Fonts/times.ttf",
+         italic  = "C:/Windows/Fonts/timesi.ttf")
+font_add(family = "TimesExtraBold", regular = "C:/Windows/Fonts/timesbd.ttf")
+
+data_organisms_plot <- data_plot |>
   ggplot(aes(x = antibiotic, fill = susceptibility)) +
   geom_bar() +
-  scale_y_log10() +
-  facet_wrap(~organism) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 4))
+  scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
+  facet_wrap(~ label, labeller = label_parsed, 
+             ncol = 2, 
+             scales = "free_x") +
+  scale_fill_manual(breaks = c("Susceptible", "Intermediate", "Resistant", 
+                               "Inconclusive", "Null"),
+                    values = c("Susceptible" = "#1f78b4",
+                               "Intermediate" = "#FDBF00",
+                               "Resistant" = "#E31A1C",
+                               "Inconclusive" = "#8C564B",
+                               "Null" = "grey70")) +   
+  theme(axis.text.x = element_text(angle = 45, 
+                                   hjust = 1, 
+                                   size = 15),
+        axis.title.x = element_text(face = "bold", 
+                                    size = 25, 
+                                    family = "TimesExtraBold"),
+        axis.title.y = element_text(face = "bold", 
+                                    size = 25, 
+                                    family = "TimesExtraBold",
+                                    margin = margin(r = 8)),
+        strip.text = element_text(size = 32, 
+                                  face = "italic", 
+                                  family = "TimesNewRoman"),
+        legend.title = element_text(family = "TimesExtraBold", 
+                                    face = "bold", 
+                                    size = 25),
+        legend.text = element_text(family = "TimesNewRoman", 
+                                   size = 20),
+        legend.position = "right",
+        legend.key.height = unit(1.5, "lines"),
+        legend.spacing.y = unit(0.8, "lines"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_line(color = "grey85"),
+        axis.ticks.length = unit(3, "pt"),
+        panel.spacing = unit(2, "lines")) +
+  labs(x = "Antibiotic (Abbreviated)",
+       y = "Number of Isolates (log[10] scale)",
+       fill = "Susceptibility Outcome")
+data_organisms_plot
 
-# tying it all together
-
-all_dfs <- list(ecoli_emm_results, kleb_emm_results, pseudoaeru_emm_results, 
-                pseudoaeru_muc_emm_results, pseudoaeru_nonmuc_emm_results,
-                staph_emm_results,  staph_mrsa_emm_results, staph_var_emm_results,
-                strep_emm_results)
-
-labels <- c("E. coli",  "K. pneumoniae", "P. aeruginosa", 
-            "Mucosal P. aeruginosa",  "Non-mucosal P. aeruginosa",
-            "S. aureus",  "MRSA", "S. aureus variant",
-            "S. pneumoniae")
+ggsave("SusceptibilityProfiles.svg",
+  plot = data_organisms_plot,
+  width = 24,
+  height = 18,
+  units = "in",
+  device = svglite::svglite)
 
 
-all_dfs <- mapply(function(df, lab) {
-  
-  # Convert to data frame if not already
-  if(!is.data.frame(df)) df <- as.data.frame(df)
-  
-  # Add dataset label as character
-  df$dataset <- lab
-  
-  return(df)
-}, all_dfs, labels, SIMPLIFY = FALSE)
+# class probability plot -------------------------------------------------------
 
-# --- 3. Standardize columns: fill missing columns with NA ---
-# Find all unique column names
-all_cols <- unique(unlist(lapply(all_dfs, colnames)))
+all_logical <- data_wrangled |>
+  filter(susceptibility %in% c("Susceptible", "Resistant")) |>
+  mutate(suscep_logical = susceptibility == "Susceptible") |>
+  group_by(organism, class) |>
+  summarise(susceptible = sum(suscep_logical),
+            resistant = sum(!suscep_logical),
+            .groups = "drop")
 
-# Make sure each df has all columns
-all_dfs <- lapply(all_dfs, function(df) {
-  missing <- setdiff(all_cols, colnames(df))
-  for(col in missing) df[[col]] <- NA
-  # reorder columns consistently
-  df[, all_cols]
-})
+# modelling
+all_bin_model <- glm(cbind(susceptible, resistant) ~ organism * class,
+                     data = all_logical,
+                     family = binomial,
+                     method = "brglmFit")
+# some antibiotics are fully susceptible or resistant, so probabilities will be 0 or 1
 
-# --- 4. Combine all data frames ---
-all_combined <- do.call(rbind, all_dfs)
+all_emm <- emmeans(all_bin_model, ~ class | organism, type = "response")
 
-# --- 5. Optional: ensure dataset is a factor for faceting ---
-all_combined$dataset <- factor(all_combined$dataset, levels = labels)
+emm_df <- as.data.frame(all_emm)
 
-all_combined <- all_combined |>
-  group_by(dataset) |>
-  mutate(rank_prob = rank(-prob, ties.method = "first"),
-         is_top2 = rank_prob <= 2) |>
-  ungroup()
+ranked_classes <- emm_df |>
+  group_by(organism) |>
+  arrange(dplyr::desc(prob), .by_group = TRUE) |>
+  filter(!is.na(prob))
 
-all_combined |>
-  ggplot(aes(x = antibiotic, y = prob, fill = is_top2)) +
-  geom_col() +
-  facet_wrap(~ dataset, scales = "free_x") + # one panel per dataset
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
-  scale_fill_manual(values = c("TRUE"= "firebrick", "FALSE" = "royalblue")) +
-  theme_minimal() +
-  labs(y = "Predicted Probability", x = "Antibiotic",
-       title = "Probability of antibiotic susceptibility by organism") +
-  theme(axis.text.x = element_text(angle = 45, size = 7, hjust = 1),
-        strip.text = element_text(face = "bold", size = 12),
-        legend.position = "none")
-        
-          
+pairwise_results <- pairs(all_emm, adjust = "tukey") |>
+  as.data.frame() |>
+  filter(!is.na(SE)) |>
+  mutate(p.signif = case_when(p.value < 0.001 ~ "***",
+                              p.value < 0.01 ~ "**",
+                              p.value < 0.05 ~ "*",
+                              TRUE ~ "ns"))
+         
+
+signif_data <- data.frame(
+  organism = c("E. coli", "E. coli", "E. coli", "E. coli", 
+               "E. coli", "E. coli", "E. coli", "E. coli", 
+               "E. coli", "E. coli",
+               "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", 
+               "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", 
+               "K. pneumoniae", "K. pneumoniae", 
+               "Mucoid P. aeruginosa",
+               "Non-mucoid P. aeruginosa", "Non-mucoid P. aeruginosa", 
+               "Non-mucoid P. aeruginosa", "Non-mucoid P. aeruginosa", 
+               "Non-mucoid P. aeruginosa", "Non-mucoid P. aeruginosa", 
+               "P. aeruginosa", "P. aeruginosa", "P. aeruginosa", "P. aeruginosa", 
+               "P. aeruginosa", "P. aeruginosa", "P. aeruginosa", "P. aeruginosa",
+               "S. aureus", "S. aureus", "S. aureus", "S. aureus", 
+               "S. aureus", "S. aureus", "S. aureus", "S. aureus", 
+               "S. aureus morphological variant", "S. aureus morphological variant",
+               "S. aureus morphological variant", "S. aureus morphological variant",
+               "MRSA", "MRSA", "MRSA", "MRSA", 
+               "MRSA", "MRSA", "MRSA", "MRSA", 
+               "S. pneumoniae", "S. pneumoniae", "S. pneumoniae", "S. pneumoniae",
+               "S. pneumoniae", "S. pneumoniae"),
+  class = c("Nitrofuran", "Phosphonic acid", "Aminoglycoside", "BL/BLI",
+            "Monobactam", "Cephalosporin","Fluoroquinolone","Folate inhibitor",
+            "Tetracycline", "Penicillin",
+            "Aminoglycoside", "BL/BLI", "Fluoroquinolone", "Monobactam",
+            "Cephalosporin", "Folate inhibitor", "Tetracycline", "Phosphonic acid",
+            "Nitrofuran", "Penicillin",
+            "Polymyxin",
+            "Aminoglycoside", "Carbapenem",
+            "Cephalosporin", "Fluoroquinolone",
+            "Monobactam", "Penicillin",
+            "Cephalosporin", "Aminoglycoside", "Carbapenem", "Fluoroquinolone",
+            "Monobactam", "Polymyxin", "Penicillin", "Folate inhibitor",
+            "Folate inhibitor", "Aminoglycoside", "Tetracycline", "Carbapenem",
+            "Fluoroquinolone", "Lincosamide", "Penicillin", "Macrolide",
+            "Penicillin", "Macrolide", "Lincosamide","Fluoroquinolone",
+            "Folate inhibitor", "Aminoglycoside", "Tetracycline", "Cephalosporin",
+            "Lincosamide", "Fluoroquinolone", "Macrolide", "Penicillin",
+            "Cephalosporin", "Folate inhibitor", "Tetracycline", "Penicillin", 
+            "Lincosamide", "Macrolide"),
+  y = c(1.02, 0.98, 0.97, 0.97, 
+        0.94, 0.93, 0.81, 0.74, 
+        0.68, 0.57,
+        1.02, 1.0, 0.97, 0.97, 
+        0.97, 0.9, 0.83, 0.75, 
+        0.49, 0.05,
+        1.1,
+        0.66, 0.72, 
+        0.77, 0.63,
+        0.77, 0.76,
+        0.95, 0.94, 0.88, 0.85, 
+        0.81, 0.79, 0.74, 0.41,
+        1.02, 1.0, 0.96, 0.91,
+        0.73, 0.69, 0.61, 0.59,
+        0.44, 0.21, 0.32, 0.41,
+        1.0, 0.97, 0.96, 0.68, 
+        0.44, 0.24, 0.2, 0.07,
+        0.95, 0.84, 0.82, 0.81,
+        0.8, 0.74),
+  label = c("***", "***", "***", "***",
+            "***", "***", "***", "***",
+            "***", "***",
+            "***", "***", "***", "***",
+            "***", "***", "***", "***",
+            "***", "***",
+            "ns",
+            "***", "***",
+            "***", "***",
+            "***", "***",
+            "***", "***", "***", "***", 
+            "***", "***", "***", "*",
+            "*", "***", "***", "*",
+            "***", "***", "***", "***", 
+            "***", "***", "***", "***", 
+            "*", "*", "**", "***",
+            "***", "***", "***", "***", 
+            "*", "***", "***", "***",
+            "***", "***"))
+
+organism_n <- data_wrangled |>
+  count(organism) |>
+  mutate(facet = paste0("italic('", organism, "')~'(n = ", n, ")'"))
+
+top_classes <- ranked_classes |>
+  dplyr::group_by(organism) |>
+  dplyr::slice_max(prob, n = 1, with_ties = FALSE) |>
+  dplyr::mutate(is_top = TRUE) |>
+  dplyr::select(organism, class, is_top)
+
+plot_df <- ranked_classes |>
+  left_join(top_classes, by = c("organism","class")) |>
+  mutate(is_top = dplyr::if_else(is.na(is_top), FALSE, TRUE)) |>
+  left_join(organism_n, by = "organism") |>
+  left_join(signif_data, by = c("organism", "class"))
+#
+susceptibility_probability_plot <- plot_df |>
+  ggplot(aes(x = class, y = prob)) +
+  geom_col(aes(color = is_top),
+           width = 0.8,
+           fill = "white",
+           linewidth = 1.2) +
+  facet_wrap(~ facet, labeller = label_parsed,
+             scales = "free_x") +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  theme_minimal(base_size = 15) +
+  labs(y = "Predicted Probability", 
+       x = "Antibiotic Class") +
+  geom_text(aes(x = class, y = y, label = label),
+            inherit.aes = FALSE,
+            size = 8) +
+  theme(axis.text.x = element_text(angle = 45, 
+                                   size = 15,
+                                   hjust = 1),
+        axis.title.x = element_text(face = "bold", 
+                                    size = 25, 
+                                    family = "TimesExtraBold"),
+        axis.title.y = element_text(face = "bold", 
+                                    size = 25, 
+                                    family = "TimesExtraBold"),
+        strip.text = element_text(size = 32, 
+                                  face = "italic", 
+                                  family = "TimesNewRoman"),
+        legend.position = "none",
+        axis.ticks.length = unit(3, "pt"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.spacing = unit(1.5, "lines")) +
+  scale_color_manual(values = c("TRUE" = "#D62728", "FALSE" = "#0072B2"))
+
+susceptibility_probability_plot
+
+
+ggsave("SusceptibilityProbability.svg",
+       plot = susceptibility_probability_plot,
+       width = 24,
+       height = 18,
+       units = "in",
+       device = svglite::svglite)
