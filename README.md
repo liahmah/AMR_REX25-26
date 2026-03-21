@@ -1,23 +1,13 @@
 # AMR_REX25
-Repository for URO REX project investigating causality factors of AMR 
+Repository for URO REX project investigating AMR (anti-microbial resistance) trends in pneumonia-causing organisms. 
 
-# Instructions:
+# Figures
 
-1. Install R and RStudio
-2. Install the following packages:
-   - tidyverse (includes ggplot2, dplyr, readr, tidyr, stringr)
-   - arrow
-   - MASS
+(can also be found in the figures folder)
 
-You can install them by:
-
-```{r}
-install.packages(c("tidyverse", "arrow", "MASS", "emmeans", "brant"))
-```
-
-Or, from the terminal via.:
-`Rscript -e 'install.packages(c("tidyverse", "arrow", "MASS", "emmeans", "brant"))'`
-
+![susceptibility probability](figures/SusceptibilityProbability.svg)
+![susceptibility profiles](figures/SusceptibilityProfiles.svg)
+![wrangling flowchart](figures/wrangling_flowchart.png)
 
 # Datasets
 
