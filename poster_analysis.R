@@ -1,12 +1,11 @@
 # Loading -----------------------------------------------------------------
 
-library(tidyverse)
-library(emmeans)
-library(scales)
-library(showtext)
-library(svglite)
-library(ggsignif)
-library(brglm2)
+library(tidyverse) # for general data wrangling
+library(emmeans) # for computing probabilities from the model, and pairwise comparisons
+library(scales) # for plot formatting
+library(showtext) # to load standard fonts
+library(svglite) # for downloading plots as svg files
+library(brglm2) # to account for complete separation in logistic model
 
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
   mutate(across(c("pat_enc_csn_id_coded", "order_proc_id_coded"), as.double))
@@ -105,7 +104,7 @@ data_wrangled <- data_wrangled |>
   mutate(
     antibiotic = recode(antibiotic, !!!abx_lookup),
     class = recode(antibiotic, !!!class_lookup),
-    genus = recode(organism,
+    species = recode(organism,
                    `ESCHERICHIA COLI` = "E. coli",
                    `KLEBSIELLA PNEUMONIAE` = "K. pneumoniae",
                    `PSEUDOMONAS AERUGINOSA` = "P. aeruginosa",
@@ -129,12 +128,12 @@ data_wrangled <- data_wrangled |>
                           `STAPHYLOCOCCUS AUREUS` = "S. aureus",
                           `STREPTOCOCCUS PNEUMONIAE` = "S. pneumoniae"))
 
-genus_n <- data_wrangled |>
-  count(genus) |>
-  mutate(label = paste0("italic('", genus, "')~'(n = ", n, ")'"))
+species_n <- data_wrangled |>
+  count(species) |>
+  mutate(label = paste0("italic('", species, "')~'(n = ", n, ")'"))
 
 data_plot <- data_wrangled |>
-  left_join(genus_n, by = "genus")
+  left_join(specoes_n, by = "species")
          
 
 showtext_auto(TRUE)

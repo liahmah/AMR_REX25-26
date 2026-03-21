@@ -1,0 +1,365 @@
+---
+title: "Antimicrobial Susceptibility Analysis"
+output: html_document
+---
+
+# Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(emmeans)
+library(scales)
+library(showtext)
+library(svglite)
+library(brglm2)
+
+showtext_auto(TRUE)
+font_add(family = "TimesNewRoman", regular = "C:/Windows/Fonts/times.ttf",
+         italic  = "C:/Windows/Fonts/timesi.ttf")
+font_add(family = "TimesExtraBold", regular = "C:/Windows/Fonts/timesbd.ttf")
+```
+
+-   *tidyverse* is used for general data wrangling;
+-   *brglm2* is a bias-reduced variation of the binomial logistic regression model to account for datasets such as this one whereby there can be complete separation in the data, meaning outcomes could be 100% susceptible or 100% resistant;
+-   *emmeans* is a method for computing probabilities from the model, and making Tukey-adjustd pairwise comparisons
+-   the *scales* package enables some plot formatting
+-   using *showtext* to load standard fonts, like Times New Roman
+-   *svglite* for downloading plots as svg files
+
+# Loading Data
+
+```{r}
+data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
+  mutate(across(c(pat_enc_csn_id_coded, order_proc_id_coded), as.double))
+```
+Dataset contains:
+- 283715 unique patients
+- 55 different antibiotics
+- 315 different organisms
+
+# Filtering Organisms
+
+```{r}
+data_organisms <- data_susceptibility |>
+  filter(organism %in% c("STREPTOCOCCUS PNEUMONIAE", 
+                         "STAPHYLOCOCCUS AUREUS",
+                         "STAPH AUREUS {MRSA}",
+                         "KLEBSIELLA PNEUMONIAE",
+                         "PSEUDOMONAS AERUGINOSA",
+                         "ESCHERICHIA COLI"))
+```
+Reduced dataset contains:
+- 51778 unique patients
+- 50 different antibiotics
+- 12 different organisms, across 5 species
+
+# Further Wrangling
+Removal of low frequency antibiotics and organisms to reduce skew
+```{r}
+data_wrangled <- data_organisms |>
+  group_by(antibiotic) |>
+  filter(n() > 100) |>  
+  ungroup() |>
+  group_by(organism) |>
+  filter(n() > 400) |>
+  ungroup()
+```
+Abbreviating antibiotic names, for plot readability
+```{r}
+abx_lookup <- c("Amoxicillin/Clavulanic Acid" = "AMC",
+                "Amikacin" = "AMK",
+                "Ampicillin" = "AMP",
+                "Aztreonam" = "ATM",
+                "Ceftazidime" = "CAZ",
+                "Ciprofloxacin" = "CIP", 
+                "Clindamycin" = "CLI",
+                "Colistin" = "COL",
+                "Ceftaroline" = "CPT",
+                "Cefuroxime" = "CXM",
+                "Ceftriaxone" = "CRO",
+                "Cefotetan" = "CTT",
+                "Cefotaxime" = "CTX",
+                "Ceftazidime/Avibactam" = "CZA",
+                "Cefazolin" = "CZO",
+                "Ceftolozane/Tazobactam" = "CZT",
+                "Daptomycin" = "DAP",
+                "Doripenem" = "DOR",
+                "Doxycycline" = "DOX",
+                "Erythromycin" = "ERY",
+                "Ertapenem" = "ETP", 
+                "Cefepime" = "FEP",
+                "Fosfomycin" = "FOS",
+                "Cefoxitin" = "FOX",
+                "Gentamicin" = "GEN", 
+                "Imipenem" = "IPM",
+                "Imipenem/Ebactam" = "IMR",
+                "Cephalexin/Cephalothin" = "LEX/CEP",
+                "Linezolid" = "LNZ",
+                "Levofloxacin" = "LVX",
+                "Meropenem" = "MEM", 
+                "Moxifloxacin" = "MFX",
+                "Nitrofurantoin" = "NIT",  
+                "Oxacillin" = "OXA",
+                "Penicillin" = "PEN",
+                "Piperacillin" = "PIP",
+                "Ampicillin/Sulbactam" = "SAM",
+                "Trimethoprim/Sulfamethoxazole" = "SXT",  
+                "Tetracycline" = "TCY",
+                "Tigecycline" = "TGC",
+                "Ticarcillin" = "TIC",
+                "Tobramycin" = "TOB",
+                "Piperacillin/Tazobactam" = "TZP",
+                "Vancomycin" = "VAN")
+```
+Creating an antibiotic class variable
+```{r}
+class_lookup <- c("AMK" = "Aminoglycoside",
+                  "GEN" = "Aminoglycoside",
+                  "TOB" = "Aminoglycoside",
+                  "AMC" = "BL/BLI", 
+                  "CZA" = "BL/BLI", 
+                  "CZT" = "BL/BLI",
+                  "IMR" = "BL/BLI",
+                  "SAM" = "BL/BLI",
+                  "TZP" = "BL/BLI",
+                  "DOR" = "Carbapenem",
+                  "ETP" = "Carbapenem",
+                  "IPM" = "Carbapenem", 
+                  "MEM" = "Carbapenem", 
+                  "CAZ" = "Cephalosporin",
+                  "CPT" = "Cephalosporin",
+                  "CRO" = "Cephalosporin",
+                  "CTT" = "Cephalosporin",
+                  "CTX" = "Cephalosporin",
+                  "CXM" = "Cephalosporin",
+                  "CZO" = "Cephalosporin", 
+                  "FEP" = "Cephalosporin",
+                  "FOX" = "Cephalosporin", 
+                  "LEX/CEP" = "Cephalosporin",
+                  "CIP" = "Fluoroquinolone", 
+                  "LVX" = "Fluoroquinolone",
+                  "MFX" = "Fluoroquinolone",
+                  "SXT" = "Folate inhibitor", 
+                  "VAN" = "Glycopeptide",
+                  "CLI" = "Lincosamide",
+                  "DAP" = "Lipopeptide",
+                  "ERY" = "Macrolide",
+                  "ATM" = "Monobactam",
+                  "NIT" = "Nitrofuran",
+                  "LNZ" = "Oxazolidinone",
+                  "AMP" = "Penicillin", 
+                  "OXA" = "Penicillin",
+                  "PEN" = "Penicillin", 
+                  "PIP" = "Penicillin", 
+                  "TIC" = "Penicillin",
+                  "FOS" = "Phosphonic acid",
+                  "COL" = "Polymyxin",
+                  "DOX" = "Tetracycline",
+                  "TCY" = "Tetracycline",
+                  "TGC" = "Tetracycline")
+```
+Recoding antibiotic abbreviations, classes, grouping subspecies by species, and recoding names into scientific format
+```{r}
+data_wrangled <- data_wrangled |>
+  mutate(antibiotic = recode(antibiotic, !!!abx_lookup),
+         class = recode(antibiotic, !!!class_lookup),
+         species = recode(organism,
+                          `ESCHERICHIA COLI` = "E. coli",
+                          `KLEBSIELLA PNEUMONIAE` = "K. pneumoniae",
+                          `PSEUDOMONAS AERUGINOSA` = "P. aeruginosa",
+                          `MUCOID PSEUDOMONAS AERUGINOSA` = "P. aeruginosa",
+                          `PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)` = "P. aeruginosa",
+                          `STAPH AUREUS {MRSA}` = "S. aureus",
+                          `STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)` = "S. aureus", 
+                          `STAPHYLOCOCCUS AUREUS` = "S. aureus",
+                          `STREPTOCOCCUS PNEUMONIAE` = "S. pneumoniae"),
+         organism = recode(organism,
+                           `ESCHERICHIA COLI` = "E. coli",
+                           `KLEBSIELLA PNEUMONIAE` = "K. pneumoniae",
+                           `PSEUDOMONAS AERUGINOSA` = "P. aeruginosa",
+                           `MUCOID PSEUDOMONAS AERUGINOSA` = "Mucoid P. aeruginosa",
+                           `PSEUDOMONAS AERUGINOSA (NON-MUCOID CF)` = 
+                          "Non-mucoid P. aeruginosa",
+                          `STAPH AUREUS {MRSA}` = "MRSA",
+                          `STAPH AUREUS(COLONY VARIANT - SMALL COLONY OR OTHER MORPHOTYPE)` = "S. aureus morphological variant", 
+                          `STAPHYLOCOCCUS AUREUS` = "S. aureus",
+                          `STREPTOCOCCUS PNEUMONIAE` = "S. pneumoniae"))
+```
+
+# Plotting Susceptibility Outcomes Across Antibiotics and Species
+Adding species counts for facet labels
+```{r}
+species_n <- data_wrangled |>
+  count(species) |>
+  mutate(label = paste0("italic('", species, "')~'(n = ", n, ")'"))
+
+data_plot <- data_wrangled |>
+  left_join(specoes_n, by = "species")
+```
+Plot!
+```{r fig.width=12, fig.height=8}
+data_plot |>
+ggplot(aes(x = antibiotic, fill = susceptibility)) +
+  geom_bar() +
+  scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
+  facet_wrap(~ label, labeller = label_parsed, 
+             ncol = 2, 
+             scales = "free_x") +
+  scale_fill_manual(breaks = c("Susceptible", "Intermediate", "Resistant", 
+                               "Inconclusive", "Null"),
+                    values = c("Susceptible" = "#1f78b4",
+                               "Intermediate" = "#FDBF00",
+                               "Resistant" = "#E31A1C",
+                               "Inconclusive" = "#8C564B",
+                               "Null" = "grey70")) +   
+  theme(axis.text.x = element_text(angle = 45, 
+                                   hjust = 1, 
+                                   size = 15),
+        axis.title.x = element_text(face = "bold", 
+                                    size = 25, 
+                                    family = "TimesExtraBold"),
+        axis.title.y = element_text(face = "bold", 
+                                    size = 25, 
+                                    family = "TimesExtraBold",
+                                    margin = margin(r = 8)),
+        strip.text = element_text(size = 32, 
+                                  face = "italic", 
+                                  family = "TimesNewRoman"),
+        legend.title = element_text(family = "TimesExtraBold", 
+                                    face = "bold", 
+                                    size = 25),
+        legend.text = element_text(family = "TimesNewRoman", 
+                                   size = 20),
+        legend.position = "right",
+        legend.key.height = unit(1.5, "lines"),
+        legend.spacing.y = unit(0.8, "lines"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_line(color = "grey85"),
+        axis.ticks.length = unit(3, "pt"),
+        panel.spacing = unit(2, "lines")) +
+  labs(x = "Antibiotic (Abbreviated)",
+       y = "Number of Isolates (log[10] scale)",
+       fill = "Susceptibility Outcome")
+```
+# Binomial Logistic Regression Model
+Converting to **susceptibility outcome** to a logical variable, dropping intermediary or null values
+```{r}
+all_logical <- data_wrangled |>
+  filter(susceptibility %in% c("Susceptible", "Resistant")) |>
+  mutate(suscep_logical = susceptibility == "Susceptible") |>
+  group_by(organism, class) |>
+  summarise(susceptible = sum(suscep_logical),
+            resistant = sum(!suscep_logical),
+            .groups = "drop")
+```
+Fitting model, using *brglmFit* to account for complete separation within data
+```{r}
+all_bin_model <- glm(cbind(susceptible, resistant) ~ organism * class,
+                     data = all_logical,
+                     family = binomial,
+                     method = "brglmFit")
+```
+Model analysis
+```{r}
+all_emm <- emmeans(all_bin_model, ~ class | organism, type = "response")
+emm_df <- as.data.frame(all_emm)
+```
+Computing significance from pairs
+```{r}
+pairwise_results <- pairs(all_emm, adjust = "tukey") |>
+  as.data.frame() |>
+  filter(!is.na(SE)) |>
+  mutate(p.signif = case_when(p.value < 0.001 ~ "***",
+                              p.value < 0.01 ~ "**",
+                              p.value < 0.05 ~ "*",
+                              TRUE ~ "ns"))
+```
+Separately ranking probabilities from highest to lowest
+```{r}
+ranked_classes <- emm_df |>
+  group_by(organism) |>
+  arrange(dplyr::desc(prob), .by_group = TRUE) |>
+  filter(!is.na(prob))
+```
+Manually extracting relevant pairs for plotting
+```{r}
+signif_data <- data.frame(
+  organism = c("E. coli", "E. coli", "E. coli", "E. coli", 
+               "E. coli", "E. coli", "E. coli", "E. coli", 
+               "E. coli", "E. coli",
+               "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", 
+               "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", "K. pneumoniae", 
+               "K. pneumoniae", "K. pneumoniae", 
+               "Mucoid P. aeruginosa",
+               "Non-mucoid P. aeruginosa", "Non-mucoid P. aeruginosa", 
+               "Non-mucoid P. aeruginosa", "Non-mucoid P. aeruginosa", 
+               "Non-mucoid P. aeruginosa", "Non-mucoid P. aeruginosa", 
+               "P. aeruginosa", "P. aeruginosa", "P. aeruginosa", "P. aeruginosa", 
+               "P. aeruginosa", "P. aeruginosa", "P. aeruginosa", "P. aeruginosa",
+               "S. aureus", "S. aureus", "S. aureus", "S. aureus", 
+               "S. aureus", "S. aureus", "S. aureus", "S. aureus", 
+               "S. aureus morphological variant", "S. aureus morphological variant",
+               "S. aureus morphological variant", "S. aureus morphological variant",
+               "MRSA", "MRSA", "MRSA", "MRSA", 
+               "MRSA", "MRSA", "MRSA", "MRSA", 
+               "S. pneumoniae", "S. pneumoniae", "S. pneumoniae", "S. pneumoniae",
+               "S. pneumoniae", "S. pneumoniae"),
+  class = c("Nitrofuran", "Phosphonic acid", "Aminoglycoside", "BL/BLI",
+            "Monobactam", "Cephalosporin","Fluoroquinolone","Folate inhibitor",
+            "Tetracycline", "Penicillin",
+            "Aminoglycoside", "BL/BLI", "Fluoroquinolone", "Monobactam",
+            "Cephalosporin", "Folate inhibitor", "Tetracycline", "Phosphonic acid",
+            "Nitrofuran", "Penicillin",
+            "Polymyxin",
+            "Aminoglycoside", "Carbapenem",
+            "Cephalosporin", "Fluoroquinolone",
+            "Monobactam", "Penicillin",
+            "Cephalosporin", "Aminoglycoside", "Carbapenem", "Fluoroquinolone",
+            "Monobactam", "Polymyxin", "Penicillin", "Folate inhibitor",
+            "Folate inhibitor", "Aminoglycoside", "Tetracycline", "Carbapenem",
+            "Fluoroquinolone", "Lincosamide", "Penicillin", "Macrolide",
+            "Penicillin", "Macrolide", "Lincosamide","Fluoroquinolone",
+            "Folate inhibitor", "Aminoglycoside", "Tetracycline", "Cephalosporin",
+            "Lincosamide", "Fluoroquinolone", "Macrolide", "Penicillin",
+            "Cephalosporin", "Folate inhibitor", "Tetracycline", "Penicillin", 
+            "Lincosamide", "Macrolide"),
+  y = c(1.02, 0.98, 0.97, 0.97, 
+        0.94, 0.93, 0.81, 0.74, 
+        0.68, 0.57,
+        1.02, 1.0, 0.97, 0.97, 
+        0.97, 0.9, 0.83, 0.75, 
+        0.49, 0.05,
+        1.1,
+        0.66, 0.72, 
+        0.77, 0.63,
+        0.77, 0.76,
+        0.95, 0.94, 0.88, 0.85, 
+        0.81, 0.79, 0.74, 0.41,
+        1.02, 1.0, 0.96, 0.91,
+        0.73, 0.69, 0.61, 0.59,
+        0.44, 0.21, 0.32, 0.41,
+        1.0, 0.97, 0.96, 0.68, 
+        0.44, 0.24, 0.2, 0.07,
+        0.95, 0.84, 0.82, 0.81,
+        0.8, 0.74),
+  label = c("***", "***", "***", "***",
+            "***", "***", "***", "***",
+            "***", "***",
+            "***", "***", "***", "***",
+            "***", "***", "***", "***",
+            "***", "***",
+            "ns",
+            "***", "***",
+            "***", "***",
+            "***", "***",
+            "***", "***", "***", "***", 
+            "***", "***", "***", "*",
+            "*", "***", "***", "*",
+            "***", "***", "***", "***", 
+            "***", "***", "***", "***", 
+            "*", "*", "**", "***",
+            "***", "***", "***", "***", 
+            "*", "***", "***", "***",
+            "***", "***"))
+```
