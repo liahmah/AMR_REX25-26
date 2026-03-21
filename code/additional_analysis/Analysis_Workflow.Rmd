@@ -32,10 +32,8 @@ font_add(family = "TimesExtraBold", regular = "C:/Windows/Fonts/timesbd.ttf")
 data_susceptibility <- read_csv("datasets/microbiology_cultures_cohort.csv") |>
   mutate(across(c(pat_enc_csn_id_coded, order_proc_id_coded), as.double))
 ```
-Dataset contains:
-- 283715 unique patients
-- 55 different antibiotics
-- 315 different organisms
+
+Dataset contains: - 283715 unique patients - 55 different antibiotics - 315 different organisms
 
 # Filtering Organisms
 
@@ -48,13 +46,13 @@ data_organisms <- data_susceptibility |>
                          "PSEUDOMONAS AERUGINOSA",
                          "ESCHERICHIA COLI"))
 ```
-Reduced dataset contains:
-- 51778 unique patients
-- 50 different antibiotics
-- 12 different organisms, across 5 species
+
+Reduced dataset contains: - 51778 unique patients - 50 different antibiotics - 12 different organisms, across 5 species
 
 # Further Wrangling
+
 Removal of low frequency antibiotics and organisms to reduce skew
+
 ```{r}
 data_wrangled <- data_organisms |>
   group_by(antibiotic) |>
@@ -64,7 +62,9 @@ data_wrangled <- data_organisms |>
   filter(n() > 400) |>
   ungroup()
 ```
+
 Abbreviating antibiotic names, for plot readability
+
 ```{r}
 abx_lookup <- c("Amoxicillin/Clavulanic Acid" = "AMC",
                 "Amikacin" = "AMK",
@@ -111,7 +111,9 @@ abx_lookup <- c("Amoxicillin/Clavulanic Acid" = "AMC",
                 "Piperacillin/Tazobactam" = "TZP",
                 "Vancomycin" = "VAN")
 ```
+
 Creating an antibiotic class variable
+
 ```{r}
 class_lookup <- c("AMK" = "Aminoglycoside",
                   "GEN" = "Aminoglycoside",
@@ -158,7 +160,9 @@ class_lookup <- c("AMK" = "Aminoglycoside",
                   "TCY" = "Tetracycline",
                   "TGC" = "Tetracycline")
 ```
+
 Recoding antibiotic abbreviations, classes, grouping subspecies by species, and recoding names into scientific format
+
 ```{r}
 data_wrangled <- data_wrangled |>
   mutate(antibiotic = recode(antibiotic, !!!abx_lookup),
@@ -187,7 +191,9 @@ data_wrangled <- data_wrangled |>
 ```
 
 # Plotting Susceptibility Outcomes Across Antibiotics and Species
+
 Adding species counts for facet labels
+
 ```{r}
 species_n <- data_wrangled |>
   count(species) |>
@@ -196,7 +202,9 @@ species_n <- data_wrangled |>
 data_plot <- data_wrangled |>
   left_join(specoes_n, by = "species")
 ```
+
 Plot!
+
 ```{r fig.width=12, fig.height=8}
 data_plot |>
 ggplot(aes(x = antibiotic, fill = susceptibility)) +
@@ -242,8 +250,11 @@ ggplot(aes(x = antibiotic, fill = susceptibility)) +
        y = "Number of Isolates (log[10] scale)",
        fill = "Susceptibility Outcome")
 ```
+
 # Binomial Logistic Regression Model
-Converting to **susceptibility outcome** to a logical variable, dropping intermediary or null values
+
+Converting **susceptibility outcome** to a logical variable, dropping intermediary or null values
+
 ```{r}
 all_logical <- data_wrangled |>
   filter(susceptibility %in% c("Susceptible", "Resistant")) |>
@@ -253,19 +264,25 @@ all_logical <- data_wrangled |>
             resistant = sum(!suscep_logical),
             .groups = "drop")
 ```
+
 Fitting model, using *brglmFit* to account for complete separation within data
+
 ```{r}
 all_bin_model <- glm(cbind(susceptible, resistant) ~ organism * class,
                      data = all_logical,
                      family = binomial,
                      method = "brglmFit")
 ```
+
 Model analysis
+
 ```{r}
 all_emm <- emmeans(all_bin_model, ~ class | organism, type = "response")
 emm_df <- as.data.frame(all_emm)
 ```
+
 Computing significance from pairs
+
 ```{r}
 pairwise_results <- pairs(all_emm, adjust = "tukey") |>
   as.data.frame() |>
@@ -275,14 +292,18 @@ pairwise_results <- pairs(all_emm, adjust = "tukey") |>
                               p.value < 0.05 ~ "*",
                               TRUE ~ "ns"))
 ```
+
 Separately ranking probabilities from highest to lowest
+
 ```{r}
 ranked_classes <- emm_df |>
   group_by(organism) |>
   arrange(dplyr::desc(prob), .by_group = TRUE) |>
   filter(!is.na(prob))
 ```
+
 Manually extracting relevant pairs for plotting
+
 ```{r}
 signif_data <- data.frame(
   organism = c("E. coli", "E. coli", "E. coli", "E. coli", 
